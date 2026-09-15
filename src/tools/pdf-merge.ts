@@ -1,0 +1,17 @@
+import type { ToolDefinition } from '@/services/tool-registry'
+import { lazyEngine } from '@/types/engine'
+
+export const pdfMergeTool: ToolDefinition = {
+  id: 'pdf-merge',
+  name: 'PDF Merge',
+  description: 'Combine two or more PDF files into one.',
+  category: 'pdf',
+  supportedInputs: ['application/pdf'],
+  acceptsMultipleFiles: true,
+  defaultOptions: {},
+  optionSchema: [],
+  engine: lazyEngine(() =>
+    import('@/engines/pdf-engine').then((m) => ({ execute: m.mergePdfs })),
+  ),
+  outputExtension: 'pdf',
+}
