@@ -14,9 +14,7 @@ export function Navigation() {
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-[270px] h-screen bg-surface-alt border-r border-hairline px-5 fixed left-0 top-0">
         <div className="flex items-center gap-3 pt-[22px] pb-6">
-          <span className="w-9 h-9 shrink-0 rounded-[12px] bg-brown text-paper flex items-center justify-center">
-            <FolderIcon />
-          </span>
+          <img src="/icons/app-icon.png" alt="FileForge" className="w-9 h-9 shrink-0 rounded-[12px] object-cover" />
           <span className="text-[22px] leading-[1.2] font-bold text-ink font-[family-name:var(--font-geist)]">
             FileForge
           </span>
@@ -69,14 +67,6 @@ export function Navigation() {
         ))}
       </nav>
     </>
-  )
-}
-
-function FolderIcon() {
-  return (
-    <svg aria-hidden="true" focusable="false" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
-    </svg>
   )
 }
 

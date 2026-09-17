@@ -68,6 +68,7 @@ if (!gotTheLock) {
   })
 
   app.whenReady().then(async () => {
+    app.setAppUserModelId('com.fileforge.app')
     setTempBase(app.getPath('temp'))
     await ensureTempBase()
     await cleanupOrphanedTemps().catch(() => {})
