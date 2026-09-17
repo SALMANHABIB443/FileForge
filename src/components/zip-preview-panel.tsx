@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { listZipContents, type ZipEntryInfo, hasUnsafePath } from '@/engines/zip-engine'
 import { nestingDepth } from '@/engines/zip-engine'
 import { formatFileSize } from '@/utils/filename'
+import { readFileAsBlob } from '@/services/file-service'
 import type { CustomPanelProps } from '@/services/tool-registry'
 
 const MAX_ENTRIES = 2000
@@ -20,11 +21,7 @@ export function ZipPreviewPanel({ files, values, onChange }: CustomPanelProps) {
     if (!file) return
     let cancelled = false
 
-    const readPromise = file.file
-      ? Promise.resolve(file.file)
-      : file.handle
-        ? file.handle.getFile()
-        : Promise.reject(new Error('Cannot read file'))
+    const readPromise = readFileAsBlob(file).then((blob) => blob as unknown as File)
 
     readPromise.then((b: File) => {
       return listZipContents(b)

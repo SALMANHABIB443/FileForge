@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 
 const BITRATES = [96, 128, 192, 256, 320]
 
@@ -30,8 +30,9 @@ export const audioConvertTool: ToolDefinition = {
       default: 192,
     },
   ],
-  engine: lazyEngine(() =>
-    import('@/engines/ffmpeg-engine').then((m) => ({ execute: m.convertAudio })),
+  engine: engineFor(
+    'ffmpeg.convertAudio',
+    () => import('@/engines/ffmpeg-engine').then((m) => ({ execute: m.convertAudio })),
   ),
   outputExtension: 'mp3',
 }

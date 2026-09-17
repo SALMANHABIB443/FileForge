@@ -1,250 +1,291 @@
 # Features.md — Detailed Feature Specification
 
-**Product:** FileForge  
-**Last Updated:** 2026-09-14  
+**Product:** FileForge
+**Last Updated:** 2026-09-16
+**Status:** Updated for Electron desktop preparation. All existing features marked with actual implementation status.
 
-This document specifies behavior for every major feature. All UI must follow Design.md. All long-running work uses the Job system defined in PRD.md and Instruction.md.
+This document specifies behavior for every major feature. All UI must follow DESIGN.md. All long-running work uses the Job system defined in PRD.md and Instruction.md.
 
 ---
 
 ## Feature Matrix
 
-| Feature | Category | Priority | Complexity | Offline | Key Dependencies | User Value |
-|---------|----------|----------|------------|---------|------------------|------------|
-| Universal File Picker + Type Detection | Core | MVP | Low | Yes | Platform File API | Critical |
-| Job System (queue, progress, cancel) | Core | MVP | Medium | Yes | — | Critical |
-| History | Core | MVP | Low–Med | Yes | Local storage | High |
-| Image Convert (JPG/PNG/WebP) | Image | MVP | Low | Yes | Canvas / image lib | High |
-| Image Compress | Image | MVP | Low | Yes | Canvas / image lib | High |
-| Image Resize | Image | MVP | Low | Yes | Canvas | High |
-| Images → PDF | PDF / Image | MVP | Medium | Yes | pdf-lib | High |
-| PDF Merge | PDF | MVP | Medium | Yes | pdf-lib | High |
-| PDF Split | PDF | MVP | Medium | Yes | pdf-lib | High |
-| PDF Compress (basic) | PDF | MVP | Medium | Yes | pdf-lib / pdfjs | Medium |
-| Create ZIP | Archive | MVP | Low | Yes | JSZip | High |
-| Extract ZIP | Archive | MVP | Medium | Yes | JSZip | High |
-| Extract TAR | Archive | V1 | Medium | Yes | Pure JS | Medium |
-| Batch Rename | File Tools | V1 | Low | Yes | — | Medium |
-| Find Duplicates | File Tools | V1 | Low | Yes | crypto.subtle | Medium |
-| File Information | General | MVP | Low | Yes | Platform + parsers | Medium |
-| Video → MP3 / WAV | Video / Audio | V1 | High | Yes* | FFmpeg.wasm | High |
-| Audio Convert (MP3/WAV/M4A) | Audio | V1 | High | Yes* | FFmpeg.wasm | Medium |
-| Video Compress / Resize | Video | V1 | High | Yes* | FFmpeg.wasm | Medium |
-| PDF → Images | PDF | V1 | Medium | Yes | pdfjs | Medium |
-| Image Crop / Rotate | Image | V1 | Medium | Yes | Canvas | Medium |
-| PDF Rotate / Reorder | PDF | V1.1 | Medium | Yes | pdf-lib | Medium |
-| Video → GIF | Video | V2 | High | Yes* | FFmpeg.wasm | Medium |
-| Developer Utilities (JSON, Base64, Hash…) | Developer | V2 | Low | Yes | Pure JS | Medium |
-| Advanced Archives (TAR/7Z/RAR) | Archive | Future | High | Partial | Platform / extra libs | Low–Med |
+| Feature | Category | Status | Complexity | Offline | Key Dependencies |
+|---------|----------|--------|------------|---------|------------------|
+| Universal File Picker + Type Detection | Core | Existing | Low-Medium | Yes | Platform File API / Electron dialog |
+| Job System (queue, progress, cancel) | Core | Existing | Medium | Yes | — |
+| Processing Queue (persistent, concurrent) | Core | Existing | Medium | Yes | IndexedDB |
+| History | Core | Existing | Low-Medium | Yes | IndexedDB / SQLite |
+| Image Convert (JPG/PNG/WebP) | Image | Existing | Low | Yes | Canvas / sharp |
+| Image Compress | Image | Existing | Low | Yes | Canvas / sharp |
+| Image Resize | Image | Existing | Low | Yes | Canvas / sharp |
+| Image Crop / Rotate | Image | Existing | Medium | Yes | Canvas / sharp |
+| Images to PDF | PDF / Image | Existing | Medium | Yes | pdf-lib |
+| PDF Merge | PDF | Existing | Medium | Yes | pdf-lib |
+| PDF Split | PDF | Existing | Medium | Yes | pdf-lib |
+| PDF Compress | PDF | Existing | Medium | Yes | pdf-lib |
+| PDF Rotate / Reorder | PDF | Existing | Medium | Yes | pdf-lib |
+| PDF to Images | PDF | Existing | Medium | Yes | pdfjs-dist |
+| Create ZIP | Archive | Existing | Low | Yes | JSZip |
+| Extract ZIP | Archive | Existing | Medium | Yes | JSZip |
+| Extract TAR | Archive | Existing | Medium | Yes | Pure-JS parser |
+| Batch Rename | File Tools | Existing | Low | Yes | — |
+| Find Duplicates | File Tools | Existing | Low | Yes | crypto.subtle |
+| File Information | File Tools | Existing | Low | Yes | Platform + parsers |
+| Video to Audio | Video | Existing | High | Yes* | FFmpeg.wasm |
+| Audio Convert | Audio | Existing | High | Yes* | FFmpeg.wasm |
+| Video Compress | Video | Existing | High | Yes* | FFmpeg.wasm |
+| JSON Formatter | Developer | Existing | Low | Yes | Pure JS |
+| Base64 Converter | Developer | Existing | Low | Yes | Pure JS |
+| Hash Generator | Developer | Existing | Low | Yes | crypto.subtle |
+| UUID Generator | Developer | Existing | Low | Yes | crypto.randomUUID |
+| URL Converter | Developer | Existing | Low | Yes | Pure JS |
+| JWT Decoder | Developer | Existing | Low | Yes | Pure JS |
+| Timestamp Converter | Developer | Existing | Low | Yes | Pure JS |
+| Windows Installer | Desktop | Required for Electron V1 | Medium | Yes | electron-builder |
+| Native File Dialogs | Desktop | Required for Electron V1 | Low | Yes | Electron dialog API |
+| Drag and Drop (Enhanced) | Desktop | Required for Electron V1 | Medium | Yes | HTML5 DnD + Electron |
+| Windows Notifications | Desktop | Required for Electron V1 | Low | Yes | Electron Notification |
+| Clipboard Integration | Desktop | Required for Electron V1 | Low | Yes | Navigator.clipboard |
+| Auto-Update | Desktop | Required for Electron V1 | Medium | Yes | electron-updater |
+| Uninstaller | Desktop | Required for Electron V1 | Low | Yes | electron-builder |
+| Overwrite Protection | Desktop | Required for Electron V1 | Low | Yes | — |
+| System Tray | Desktop | Future (V2) | Medium | Yes | Electron Tray |
 
-\* Subject to browser memory and FFmpeg.wasm limitations; native wrappers improve this.
+\* Subject to memory and FFmpeg limitations; native binary in Electron improves this.
+
+---
+
+## Status Key
+
+| Status | Meaning |
+|--------|---------|
+| **Existing** | Implemented in the current web/PWA version |
+| **Required for Electron V1** | Must be implemented for the first desktop release |
+| **Future (V2)** | Planned for a future version after V1 |
+| **Not Planned** | Explicitly excluded from scope |
 
 ---
 
 ## Core Infrastructure Features
 
-### Feature: Universal File Picker & Type Detection
+### Feature: Universal File Picker and Type Detection
 
-**Category:** Core  
-**Priority:** MVP  
+**Status:** Existing
+**Category:** Core
 **Purpose:** Entry point for almost every workflow. Detect type and surface only relevant operations.
 
 **User Flow:**
-1. User taps “Select files” or drops files / uses share sheet.
+1. User taps "Select files" or drops files.
 2. App requests necessary permission if needed.
-3. Files are accepted; each is inspected (extension + MIME + light content sniff).
+3. Files are accepted; each is inspected (extension + MIME).
 4. Preview card(s) appear with name, size, type icon/thumbnail, and list of compatible tools.
 5. User chooses a tool or opens full Tools list.
 
-**Inputs:** One or more files (platform limits apply).  
-**Outputs:** FileMeta objects (id, name, size, mime, extension, lastModified, temporary handle/URL).  
+**Inputs:** One or more files (platform limits apply).
+**Outputs:** FileMeta objects (id, name, size, mime, extension, lastModified, temporary handle/URL).
 
 **Validation:**
 - Reject zero-byte files with clear message.
 - Warn on extremely large files before processing.
-- Unsupported types show “No direct tools” + link to full catalog.
+- Unsupported types show "No direct tools" + link to full catalog.
 
-**States:** Idle → Selecting → Ready (with FileMeta) → Error (permission / unsupported).  
+**States:** Idle > Selecting > Ready (with FileMeta) > Error (permission / unsupported).
 
-**Edge Cases:** Multiple files of mixed types → group by type or process sequentially. HEIC on unsupported platforms → graceful fallback message.
-
-**Technical Difficulty:** Low–Medium (platform differences).  
-**Dependencies:** Platform File API / File System Access API / share sheet.
+**Desktop Integration:**
+- Current: File System Access API (`showOpenFilePicker`) with `<input>` fallback.
+- Electron: `dialog.showOpenDialog()` with file type filters. No permission prompts needed.
 
 ---
 
 ### Feature: Job System
 
-**Category:** Core  
-**Priority:** MVP  
+**Status:** Existing
+**Category:** Core
 
-**Purpose:** Unified lifecycle for every conversion or long operation.
-
-**States:** `pending` | `processing` | `completed` | `failed` | `cancelled`
+**States:** `pending` | `processing` | `completed` | `failed` | `cancelled` (non-terminal states persist for restart recovery)
 
 **Data per Job:**
-- id (UUID)
+- id (unique)
 - toolId
-- inputFileMeta[]
+- inputs: FileMeta[]
 - options
 - status
-- progress (0–100 or null for indeterminate)
-- stage message (optional)
-- error (message + code)
-- createdAt / startedAt / finishedAt
-- outputFileMeta (on success)
-- tempPaths (internal)
+- progress (percent, message, current file index/total in batch jobs)
+- error (human-readable message)
+- errorDetails (technical stack, expandable)
+- failedFiles ({name, error}[] for batch errors)
+- retryCount
+- interrupted (boolean, set for jobs cut off by app close)
+- createdAt / updatedAt
+- outputBlob / outputPath / outputName (on success)
 
 **Behavior:**
-- Create → enqueue.
-- Runner executes with progress callback and AbortSignal.
+- Create > enqueue; a scheduler (pump) runs up to `maxConcurrentJobs` (default 2, range 1–4) at once.
+- Runner executes with progress callback and AbortSignal; per-file progress = "File x of y" + stage + percent.
 - On finish: validate output, update history, clean temp, notify UI.
-- Cancel: abort signal, clean temp, set cancelled.
-- Retry: create new job from previous options (only if safe).
+- Cancel: works from queue (before start) or via abort signal (while running).
+- Retry: creates a NEW job from the failed job's inputs + options (only if safe — inputs must still resolve to paths); shown for failed/interrupted jobs.
+- Batch errors: remaining files still process, then the job fails listing the affected files with per-file reasons.
 
-**Concurrency (MVP):** One heavy media job; up to 3 light jobs (image/PDF/ZIP).  
-**Storage:** In-memory + optional IndexedDB snapshot for recovery after crash.
+**Concurrency:**
+- Current: configurable concurrent jobs (Settings → max concurrent, 1–4, default 2) on both web and desktop.
 
-**Error States:** Engine error, validation failure, abort, storage full.  
-**Success State:** Output ready + Save/Share actions.
+**Storage:**
+- Current: IndexedDB (`fileforge_jobs` / `queued`) for the persistent queue; job states snapshotted on every change, non-terminal jobs survive restart.
+- Restore: pending jobs with complete input paths auto-resume on startup (toggle: resume pending jobs); those that were processing when the app closed are marked failed with `interrupted: true` and can be retried.
 
 ---
 
 ### Feature: History
 
-**Category:** Core  
-**Priority:** MVP  
+**Status:** Existing
+**Category:** Core
 
 **Purpose:** Let users revisit recent results without re-selecting files.
 
-**User Flow:** History tab → list of past jobs (newest first) → tap for details → Save / Share / Delete / Re-run.
+**User Flow:** History tab > list of past jobs (newest first) > tap for details > Open / Delete / Re-run.
 
-**Storage:** Local only (IndexedDB or equivalent). Configurable retention (default last 50 or 30 days).  
-**Data stored:** Job metadata + local output path/URL (not file content).  
+**Storage:**
+- Current: IndexedDB, max 200 entries, auto-pruned.
+- Desktop: SQLite or JSON file in `%APPDATA%\FileForge\`, same 200-entry limit.
 
-**Actions:** Open result, Share, Delete entry, Clear all, Re-run (re-creates job with same options if input still available).  
+**Data stored:** Job metadata (id, toolId, inputNames, inputSize, outputName, status, createdAt). Never file contents.
 
-**Empty State:** “No recent activity. Convert a file to see it here.”  
-**Error State:** Storage read failure → graceful empty + retry.
+**Actions:** Open result, Delete entry, Clear all, Re-run (re-creates job with same options if input still available).
+
+**Empty State:** "No recent activity. Convert a file to see it here."
+**Error State:** Storage read failure > graceful empty + retry.
 
 ---
 
 ## Image Features
 
-### Feature: Image Format Conversion (JPG ↔ PNG ↔ WebP)
+### Feature: Image Format Conversion
 
-**Category:** Image  
-**Priority:** MVP  
+**Status:** Existing
+**Category:** Image
+**Priority:** Implemented (Phase 1-3)
 
-**Purpose:** Convert between common web/image formats without quality loss beyond the target format’s limits.
+**Purpose:** Convert between common web/image formats without quality loss beyond the target format's limits.
 
 **User Flow:**
 1. Select image(s).
-2. Choose target format.
+2. Choose target format (JPG, PNG, or WebP).
 3. Optional quality slider (for lossy targets).
-4. Convert → progress → result card → Save/Share.
+4. Optional strip metadata toggle (default: on for privacy).
+5. Convert > progress > result card > Save.
 
-**Inputs:** JPG, JPEG, PNG, WebP (and HEIC where platform supports read).  
-**Outputs:** Same set.  
+**Inputs:** Any `image/*` MIME type (browser decodes via Canvas; JPG, PNG, WebP, GIF, BMP, etc.).
+**Outputs:** JPG, PNG, or WebP only (Canvas encoding limits).
 
 **Configuration:**
-- Target format (required)
-- Quality (1–100, default 85 for JPG/WebP; ignored for PNG)
-- Preserve metadata (default false for privacy)
+- Target format: required (JPG, PNG, WebP)
+- Quality: 1-100, default 85 for JPG/WebP; ignored for PNG
+- Strip metadata: boolean, default true
 
-**Default:** Quality 85, strip metadata.  
+**Default:** Quality 85, strip metadata.
 
-**Validation:** Supported MIME/extension; max dimension warning (e.g. > 8000 px).  
-**Progress:** Indeterminate or per-image for batch.  
-**Cancellation:** Supported.  
-**Storage:** Output named `{base}_{format}.{ext}`.  
-**Batch:** Multiple images → one file per image zipped as `{first}_converted.zip`; a single image returns the converted image directly.  
-**Edge Cases:** Animated WebP → first frame or reject with message; transparent PNG → JPG fills with white or configurable background.
+**Batch:** Multiple images > `{first}_converted.zip`; single image returns the converted image directly.
 
-**Technical Difficulty:** Low.  
-**Dependencies:** Canvas or dedicated image library.
+**Edge Cases:**
+- Transparent PNG > JPG: fills with white background automatically.
+- Animated WebP: first frame only (Canvas limitation).
+- Already tiny files: processes normally (no "already optimized" check).
+
+**Desktop Integration:**
+- Canvas-based processing moves to `sharp` or `node-canvas` in Node.js.
+- Output saved via native fs instead of download/blob URL.
 
 ---
 
 ### Feature: Image Compression
 
-**Category:** Image  
-**Priority:** MVP  
+**Status:** Existing
+**Category:** Image
+**Priority:** Implemented (Phase 1)
 
 **Purpose:** Reduce file size while keeping acceptable visual quality.
 
-**User Flow:** Select image → Compress → quality / target size preset → process → before/after size comparison → Save.
-
 **Options:**
-- Quality (default 80)
-- Max dimension (optional)
-- Target format (keep original or force WebP/JPG)
-- Strip metadata (default on — canvas re-encode drops EXIF; when off, EXIF is best-effort re-injected for JPEG)
+- Quality: 1-100, default 80
+- Max dimension: optional (px), downscales if image exceeds
+- Strip metadata: boolean, default true
 
-**Success State:** Show original size vs new size + percentage saved.  
-**Batch:** Multiple images → `{first}_compressed.zip`; single image returned directly; before/after comparison per file.  
-**Edge Cases:** Already tiny files → “Already optimized” message.
+**Output format:** Same as input (JPG stays JPG, PNG stays PNG, WebP stays WebP).
+
+**Success State:** Shows original size vs new size + percentage saved.
+
+**Batch:** Multiple images > `{first}_compressed.zip`; single image returned directly; before/after comparison per file.
+
+**Edge Cases:** Already tiny files > processes normally.
 
 ---
 
 ### Feature: Image Resize
 
-**Category:** Image  
-**Priority:** MVP  
-
-**Purpose:** Change dimensions for social media, email, or storage.
+**Status:** Existing
+**Category:** Image
+**Priority:** Implemented (Phase 1)
 
 **Options:**
 - Width / Height (px)
 - Maintain aspect ratio (default true)
 - Fit mode: contain / cover / stretch (default contain)
-- Output format (keep original or force JPG/WebP)
-- Resample quality
+- Output format: same as input
+- Quality: default 90
 
-**Batch:** Multiple images → `{first}_resized.zip`; single image returned directly (+ “× smaller/larger” note).
-**Default:** Maintain aspect, contain.  
-**Validation:** Positive integers; warn on upscaling > 2×.
+**Batch:** Multiple images > `{first}_resized.zip`; single image returned directly.
+
+**Default:** Maintain aspect, contain.
+**Validation:** Positive integers; warn on upscaling > 2x.
 
 ---
 
-### Feature: Image Crop / Rotate
+### Feature: Image Crop and Rotate
 
-**Category:** Image  
-**Priority:** V1  
+**Status:** Existing
+**Category:** Image
+**Priority:** Implemented (Phase 3)
 
 **Purpose:** Crop a photo to a region and/or rotate it before export.
 
-**User Flow:** Select one image → drag handles to set the crop box on a scaled preview → optional 0°/90°/180°/270° rotation → Crop → result.
+**User Flow:** Select one image > drag handles to set crop box on scaled preview > optional 0/90/180/270 rotation > Crop > result.
 
 **Options:**
-- Crop rectangle (x, y, width, height in source pixels, derived from the interactive box)
-- Rotation (0 / 90 / 180 / 270)
+- Crop rectangle (x, y, width, height in source pixels)
+- Rotation: 0 / 90 / 180 / 270
+- Output format: JPG, PNG, or WebP (default: source format)
+- Quality: default 90
+- Strip metadata: default true
 
-**UI:** Interactive preview panel (max width 560 px) with a dimmed-overlay crop box that supports drag-to-move and a corner handle to resize. Selection size in source pixels is shown under the preview.
+**UI:** Interactive preview panel with dimmed-overlay crop box, drag-to-move, corner handle to resize. Selection size shown in source pixels.
 
-**Output:** One processed image; format follows the source unless a target format is chosen.  
-**Edge Cases:** 90°/270° rotation swaps crop width/height; box is clamped to the image bounds; minimum box size 16 px.
+**Output:** Single processed image. Batch not supported for crop.
+
+**Edge Cases:** 90/270 rotation swaps crop width/height; box clamped to image bounds; minimum box size 16 px.
 
 ---
 
-### Feature: Images → PDF
+### Feature: Images to PDF
 
-**Category:** PDF / Image  
-**Priority:** MVP  
+**Status:** Existing
+**Category:** PDF / Image
+**Priority:** Implemented (Phase 1-3)
 
 **Purpose:** Turn one or more images into a single PDF document.
 
-**User Flow:** Select images → order (reorder panel with up/down buttons) → page size / orientation (optional) → Create PDF → result.
+**Inputs:** JPG, PNG only (not WebP — pdf-lib limitation for embedding).
 
 **Options:**
-- Page order (interactive reorder list when 2+ images)
-- Page size (A4, Letter, fit-to-image – default fit-to-image)
-- Orientation
-- Margin
-- Image quality inside PDF
+- Page size: fit-to-image (default), A4, Letter
+- Orientation: portrait / landscape
+- Margin: 0-96 px, default 24
+- Page order: interactive reorder panel when 2+ images
 
-**Output:** Single PDF.  
-**Edge Cases:** Mixed orientations; very large images (downscale warning).
+**Output:** Single PDF.
+
+**Edge Cases:** Mixed orientations; very large images (downscale to fit page).
 
 ---
 
@@ -252,82 +293,88 @@ This document specifies behavior for every major feature. All UI must follow Des
 
 ### Feature: PDF Merge
 
-**Category:** PDF  
-**Priority:** MVP  
+**Status:** Existing
+**Category:** PDF
+**Priority:** Implemented (Phase 1)
 
 **Purpose:** Combine multiple PDFs into one.
 
-**User Flow:** Select 2+ PDFs → reorder → Merge → progress → single PDF.
+**User Flow:** Select 2+ PDFs > reorder > Merge > progress > single PDF.
 
-**Options:** Minimal (order only).  
-**Validation:** All must be valid PDFs; warn on encrypted files.  
-**Error:** Password-protected without password → clear failure message.  
-**Technical Difficulty:** Medium.  
-**Dependencies:** pdf-lib (or equivalent).
+**Validation:** All must be valid PDFs; password-protected detected with clear error message.
+
+**Edge Cases:** Encrypted without password > clear failure message.
 
 ---
 
 ### Feature: PDF Split
 
-**Category:** PDF  
-**Priority:** MVP  
+**Status:** Existing
+**Category:** PDF
+**Priority:** Implemented (Phase 1)
 
 **Purpose:** Extract page ranges or every page into separate files.
 
 **Options:**
-- Range (e.g. 1-3, 5, 8-10)
-- Or “Every page as separate PDF”
-- Output naming pattern
+- Mode: range / every
+- Range syntax: `1-3, 5, 8-10`
+- "Every page" mode outputs individual PDFs zipped
 
-**Output:** One or multiple PDFs.  
-**Edge Cases:** Invalid range → validation error before start.
-
----
-
-### Feature: PDF Compress (Basic)
-
-**Category:** PDF  
-**Priority:** MVP  
-
-**Purpose:** Reduce PDF size by image recompression and object optimization where the library allows.
-
-**Options:** Quality preset (Low / Medium / High – default Medium).  
-**Limitation:** True structural compression is limited in pure client-side libraries; document realistic expectations in UI.
+**Edge Cases:** Invalid range > validation error before start.
 
 ---
 
-### Feature: PDF Rotate / Reorder Pages
+### Feature: PDF Compress
 
-**Category:** PDF  
-**Priority:** V1.1  
+**Status:** Existing
+**Category:** PDF
+**Priority:** Implemented (Phase 1)
 
-**Purpose:** Reorder pages and/or apply a uniform rotation to a whole document.
+**Purpose:** Reduce PDF size by rebuilding the document.
 
-**User Flow:** Select PDF → page thumbnails/list load → reorder with up/down buttons → choose rotation (0/90/180/270) → Save.
+**Behavior:** Rebuilds PDF with pdf-lib; returns the smaller of original/rebuilt. If rebuilt is larger, returns original unchanged.
+
+**Limitation:** True structural compression is limited in pdf-lib; expectations should be documented in UI.
+
+---
+
+### Feature: PDF Rotate and Reorder Pages
+
+**Status:** Existing
+**Category:** PDF
+**Priority:** Implemented (Phase 3)
+
+**Purpose:** Reorder pages and/or apply uniform rotation.
+
+**User Flow:** Select PDF > page thumbnails load > reorder with up/down buttons > choose rotation (0/90/180/270) > Save.
 
 **Options:**
-- Page order (interactive reorder list, initialized from the document)
-- Rotation (applied to every page; stacked with existing per-page rotations)
+- Page order (interactive reorder list)
+- Rotation applied to every page (stacked with existing per-page rotations)
 
-**Output:** Single re-encoded PDF.  
-**Edge Cases:** Encrypted/corrupt PDF → the ordering panel shows a clear message instead of a silent blank state; stale order arrays fall back to identity order.
+**Output:** Single re-encoded PDF.
 
-### Feature: PDF → Images (V1)
+---
 
-**Category:** PDF  
-**Priority:** V1  
+### Feature: PDF to Images
+
+**Status:** Existing
+**Category:** PDF
+**Priority:** Implemented (Phase 3)
 
 **Purpose:** Rasterize pages to JPG or PNG.
 
 **Options:**
-- Format (JPG / PNG, default JPG)
-- Scale (1× / 2× / 3×, default 2× — conservative DPI by default)
-- Quality (1–100, JPG only, default 92; normalized to the canvas encoder’s 0–1 scale)
-- Page range (`1-3, 5, 8-10`) or all pages
+- Format: JPG / PNG (default JPG)
+- Scale: 1x / 2x / 3x (default 2x)
+- Quality: 1-100, JPG only (default 92)
+- Page range: `1-3, 5, 8-10` or all pages
 
-**Output:** Single page → one image; multiple pages → `{base}_pages.zip` of images.  
-**Dependencies:** pdfjs-dist (lazy loaded; worker served as a Vite asset, works offline). Renders with the canvas-backed render path (`page.render({ canvas, viewport })`).  
-**Limits:** Max 200 pages per run to protect memory.
+**Output:** Single page > one image; multiple pages > `{base}_pages.zip` of images.
+
+**Limits:** Max 200 pages per run.
+
+**Dependencies:** pdfjs-dist (lazy-loaded; worker served as Vite asset). Renders with canvas-backed `page.render()`.
 
 ---
 
@@ -335,226 +382,543 @@ This document specifies behavior for every major feature. All UI must follow Des
 
 ### Feature: Create ZIP
 
-**Category:** Archive  
-**Priority:** MVP  
+**Status:** Existing
+**Category:** Archive
+**Priority:** Implemented (Phase 1)
 
-**Purpose:** Package multiple files or folders into a ZIP archive.
+**Purpose:** Package multiple files into a ZIP archive.
 
-**User Flow:** Select files/folders → optional compression level → Create → progress → ZIP file.
+**Options:** Compression level: 1 (fastest), 6 (medium, default), 9 (maximum).
 
-**Options:** Compression level (default medium).  
-**Validation:** Total uncompressed size warning.  
 **Edge Cases:** Nested folders; long filenames.
 
 ---
 
 ### Feature: Extract ZIP
 
-**Category:** Archive  
-**Priority:** MVP  
+**Status:** Existing
+**Category:** Archive
+**Priority:** Implemented (Phase 1-4)
 
-**Purpose:** Unpack a ZIP into a chosen location or temporary then download.
+**Purpose:** Unpack a ZIP with content preview and selective extraction.
 
 **Safety:**
-- Zip-bomb protection (max uncompressed size 4 GB, max file count 2000, max nesting depth 32).
-- Filename sanitization (no `../`, backslashes, drive letters, `~`, or absolute `/`).
-- Skip or warn on absolute paths / Windows reserved names.
+- Max 2,000 entries
+- Max 4 GiB uncompressed
+- Max 32-level nesting depth
+- Path sanitization (no `../`, backslashes, drive letters, `~`, absolute `/`)
+- Header checksum validation
 
-**User Flow:** Select ZIP → preview contents (file list with sizes, select-all, per-file checkboxes, selected-size summary) → optional selective extract → Extract → choose output location → progress → done.
+**User Flow:** Select ZIP > preview contents (file list with sizes, select-all, per-file checkboxes) > optional selective extract > Extract > choose output location > progress > done.
 
-**Options:**
-- `selectedEntries` (internal): names of files to extract; when empty, all safe files extract. Toggled via the preview panel.
-
-**Error States:** Corrupted archive, password-protected (unsupported in MVP), bomb detected, no safe files.
+**Output:**
+- Current (File System Access API): extracts to chosen folder, returns manifest text.
+- Desktop target (Electron): extracts to chosen folder via native folder dialog, returns manifest text.
+- Fallback: re-packages into `{base}_extracted.zip`.
 
 ---
 
 ### Feature: Extract TAR
 
-**Category:** Archive  
-**Priority:** V1  
+**Status:** Existing
+**Category:** Archive
+**Priority:** Implemented (Phase 4)
 
 **Purpose:** Unpack a plain `.tar` archive with the same safety guarantees as ZIP extraction.
 
-**Implementation:** Pure-JS TAR parsing (512-byte headers with octal fields and checksum validation). No new third-party dependency. `.tar.gz` is not supported in this release.
+**Implementation:** Pure-JS TAR parser (512-byte headers with octal fields and checksum validation). No third-party dependency. `.tar.gz` is not supported.
 
-**Safety:** Same limits as ZIP (entry count, total uncompressed size, nesting depth) plus header checksum verification and path sanitization.
+**Safety:** Same limits as ZIP plus header checksum verification.
 
-**Output:** Extract to a chosen folder via File System Access API when available; otherwise re-packaged into `{base}_extracted.zip`.
+**Output:** Same as ZIP extract (folder or fallback ZIP).
 
 ---
 
+## File Utility Features
+
 ### Feature: Batch Rename
 
-**Category:** File Tools  
-**Priority:** V1  
-
-**Purpose:** Rename multiple files at once using simple patterns.
+**Status:** Existing
+**Category:** File Tools
+**Priority:** Implemented (Phase 4)
 
 **Options:**
-- Mode: Add prefix / Add suffix / Find & replace / Sequential numbering
+- Mode: prefix / suffix / find-replace / sequential numbering
 - Prefix text, suffix text, find text, replace text
 - Start number and pad width (sequential mode)
 
-**UI:** Live preview panel listing original → renamed pairs with a changed-count badge; updates as options change.
+**UI:** Live preview panel listing original > renamed pairs with changed-count badge.
 
-**Output:** A single file returns the renamed copy directly; multiple files return `{first}_renamed.zip` containing all renamed files. Extensions are preserved.
+**Output:** Single file > renamed copy directly; multiple files > `{first}_renamed.zip`. Extensions preserved.
 
 ---
 
 ### Feature: Find Duplicates
 
-**Category:** File Tools  
-**Priority:** V1  
+**Status:** Existing
+**Category:** File Tools
+**Priority:** Implemented (Phase 4)
 
 **Purpose:** Detect duplicate files by content.
 
-**Implementation:** SHA-256 hash of every selected file via `crypto.subtle` (no dependencies). Files with identical hashes are grouped.
+**Implementation:** SHA-256 hash of every file via `crypto.subtle`. Files with identical hashes are grouped.
 
-**UI:** Instant tool (no job). Shows group count plus each group’s members with file names and sizes. Empty state: “No duplicate files found”.
+**UI:** Instant tool (no job). Shows group count plus each group's members with file names and sizes.
 
----
-
-## Video / Audio Features (V1+)
-
-### Feature: Video → MP3 / WAV
-
-**Category:** Video / Audio  
-**Priority:** V1  
-
-**Purpose:** Extract audio track from video.
-
-**Supported Inputs (baseline):** MP4, MOV, WebM (others via FFmpeg capability).  
-**Outputs:** MP3 (default), WAV.  
-
-**Options:**
-- Format (MP3 / WAV, default MP3)
-- Bitrate (for MP3, default 192 kbps; presets 96/128/192/256/320)
-
-**Progress:** FFmpeg core emits time-based progress mapped to a percentage.  
-**Cancellation:** Supported via AbortSignal; the engine terminates the worker on cancel to stop CPU usage and free memory.  
-**Warnings:** Files over 200 MB warn before conversion; files over 1 GB are rejected.  
-**Technical Difficulty:** High (WASM size, memory, codec support).  
-**Dependencies:** FFmpeg.wasm (lazy loaded; core self-hosted in `public/ffmpeg/`).
-
-**Edge Cases:** Video with no audio track → clear error. Unsupported codec → “Codec not supported in this version” / generic conversion-failed message.
+**Empty State:** "No duplicate files found."
 
 ---
-
-### Feature: Audio Conversion & Compression
-
-**Category:** Audio  
-**Priority:** V1  
-
-**Purpose:** Convert between MP3, WAV, M4A and adjust bitrate.
-
-**Options:** Format (MP3 / WAV / M4A) and bitrate (MP3/M4A only — WAV is PCM).  
-**Output formats:** MP3 (libmp3lame), WAV (PCM 16-bit), M4A (AAC).  
-**Similar flow and safeguards as video audio extraction** (progress, cancel, 200 MB warn / 1 GB limit).
-
----
-
-### Feature: Video Compress / Resolution Change (V1)
-
-**Category:** Video  
-**Priority:** V1  
-
-**Purpose:** Reduce video size or change resolution for sharing.
-
-**Options:** Resolution preset (original/1080p/720p/480p), quality (CRF 18–38, default 28), audio bitrate (96/128/192 kbps, default 128).  
-**Output:** MP4 (H.264 + AAC, faststart).  
-**Heavy warnings required.** Files over 200 MB warn; over 1 GB rejected. Prefer desktop or warn heavily on mobile.
-
----
-
-## General File Tools
 
 ### Feature: File Information
 
-**Category:** General  
-**Priority:** MVP  
+**Status:** Existing
+**Category:** File Tools
+**Priority:** Implemented (Phase 1-4)
 
-**Purpose:** Show size, type, dimensions (images), duration (media), basic metadata, PDF page count, and the file's SHA-256 hash.
+**Purpose:** Show size, type, dimensions (images), duration (media), metadata, PDF page count, and SHA-256 hash.
 
-**User Flow:** Select file → Info card.  
-**EXIF viewer:** JPEG/WebP photos show camera make/model and original date taken (parsed lazily with exifreader; MPL-2.0).  
-**Media:** MP3/WAV/MP4/MOV show duration (mm:ss) and bitrate via lightweight header parsing (no FFmpeg load).  
-**PDF:** Page count via lazy-loaded pdf-lib.  
-**Hash:** SHA-256 shown truncated for every file (computed with `crypto.subtle`).  
-**No conversion; instant.**
+**Behavior by file type:**
+- **Images:** Dimensions (Canvas), EXIF metadata (camera make/model, date taken via exifreader for JPEG/WebP)
+- **Audio:** Duration (mm:ss), bitrate via header parsing (MP3, WAV)
+- **Video:** Duration via MP4 moov atom parsing (MP4, MOV)
+- **PDF:** Page count via lazy-loaded pdf-lib
+- **All files:** SHA-256 hash (truncated) via `crypto.subtle`
+
+**No conversion; instant result.**
 
 ---
 
-## Developer Utilities (V2)
+## Video and Audio Features
 
-Lightweight, pure-JS tools. Examples:
+### Feature: Video to Audio
 
-- JSON Format / Minify
-- Base64 Encode / Decode
-- Hash (MD5, SHA-256, SHA-512)
-- UUID Generator
-- URL Encode / Decode
-- Simple JWT Decoder (header + payload, no signature verification required for display)
-- Timestamp ↔ Date
+**Status:** Existing
+**Category:** Video
+**Priority:** Implemented (Phase 2)
 
-Each is a simple form → process → copyable result. No file job system needed unless operating on uploaded text files.
+**Purpose:** Extract audio track from video.
 
-**Priority:** V2 – after core media and document tools are solid.
+**Supported Inputs:** MP4, MOV, WebM (others via FFmpeg capability).
+**Outputs:** MP3 (default), WAV.
+
+**Options:**
+- Format: MP3 / WAV (default MP3)
+- Bitrate: 96/128/192/256/320 kbps (default 192)
+
+**Progress:** FFmpeg progress event mapped to percentage.
+**Cancellation:** Supported via AbortSignal; worker terminated on cancel.
+**Warnings:** 200 MiB warn, 1 GiB hard limit.
+
+**Edge Cases:** No audio track > clear error. Unsupported codec > conversion-failed message.
+
+---
+
+### Feature: Audio Conversion
+
+**Status:** Existing
+**Category:** Audio
+**Priority:** Implemented (Phase 2)
+
+**Purpose:** Convert between MP3, WAV, M4A and adjust bitrate.
+
+**Options:** Format (MP3 / WAV / M4A) and bitrate (MP3/M4A only).
+**Output formats:** MP3 (libmp3lame), WAV (PCM 16-bit), M4A (AAC).
+
+**Same safeguards as video audio extraction** (progress, cancel, 200 MiB warn / 1 GiB limit).
+
+---
+
+### Feature: Video Compress
+
+**Status:** Existing
+**Category:** Video
+**Priority:** Implemented (Phase 2)
+
+**Purpose:** Reduce video size or change resolution.
+
+**Options:**
+- Resolution: original / 1080p / 720p / 480p
+- CRF quality: 18/22/28/32/38 (default 28)
+- Audio bitrate: 96/128/192 kbps (default 128)
+
+**Output:** MP4 (H.264 + AAC, faststart flag).
+
+**Heavy warnings required.** 200 MiB warn, 1 GiB rejected.
+
+---
+
+## Developer Tools
+
+### Feature: JSON Formatter
+
+**Status:** Existing
+**Category:** Developer
+**Priority:** Implemented (Phase 5)
+
+**Options:** Mode (format / minify), indent (0-8, default 2).
+**UI:** Text input > process > copyable result.
+**Error:** Invalid JSON shows clear error message.
+
+---
+
+### Feature: Base64 Converter
+
+**Status:** Existing
+**Category:** Developer
+**Priority:** Implemented (Phase 5)
+
+**Options:** Mode (encode / decode).
+**Behavior:** UTF-8 safe in both directions.
+**Error:** Invalid Base64 input shows clear error message.
+
+---
+
+### Feature: Hash Generator
+
+**Status:** Existing
+**Category:** Developer
+**Priority:** Implemented (Phase 5)
+
+**Options:** Algorithm (SHA-256 / SHA-512).
+**Implementation:** `crypto.subtle.digest`. MD5 intentionally omitted (deprecated).
+**UI:** Text input > hash output (copyable).
+
+---
+
+### Feature: UUID Generator
+
+**Status:** Existing
+**Category:** Developer
+**Priority:** Implemented (Phase 5)
+
+**Options:** Count (1-100).
+**Implementation:** `crypto.randomUUID()`.
+**UI:** Click to generate; output is copyable.
+
+---
+
+### Feature: URL Converter
+
+**Status:** Existing
+**Category:** Developer
+**Priority:** Implemented (Phase 5)
+
+**Options:** Mode (encode / decode).
+**Implementation:** `encodeURIComponent` / `decodeURIComponent`.
+**Error:** Invalid URL encoding shows clear error message.
+
+---
+
+### Feature: JWT Decoder
+
+**Status:** Existing
+**Category:** Developer
+**Priority:** Implemented (Phase 5)
+
+**Purpose:** View header and payload of a JWT token.
+**Implementation:** Display only; no signature verification.
+**Error:** Malformed JWT structure shows clear error message.
+
+---
+
+### Feature: Timestamp Converter
+
+**Status:** Existing
+**Category:** Developer
+**Priority:** Implemented (Phase 5)
+
+**Options:** Unit (seconds / milliseconds).
+**Output:** ISO 8601, local date/time, UTC date/time.
+**Error:** Non-numeric input shows clear error message.
+
+---
+
+## Desktop Features (Electron V1)
+
+### Feature: Windows Installer
+
+**Status:** Required for Electron V1
+**Category:** Desktop
+
+**Purpose:** Install FileForge as a native Windows application.
+
+**Requirements:**
+- Windows `.exe` installer (NSIS or MSI)
+- Start Menu shortcut (required)
+- Desktop shortcut (optional, user choice during install)
+- Installation directory selection where supported
+- Version information displayed
+- File type associations where applicable
+
+**Technology:** To Be Decided (electron-builder or electron-forge).
+
+---
+
+### Feature: Uninstaller
+
+**Status:** Required for Electron V1
+**Category:** Desktop
+
+**Purpose:** Properly remove FileForge from the system.
+
+**Requirements:**
+- Remove application files
+- Remove Start Menu shortcut
+- Remove Desktop shortcut (if created)
+- Remove application data (`%APPDATA%\FileForge\`) per user preference
+- Never delete user-generated output files
+- Clearly distinguish application data from user files
+
+---
+
+### Feature: Native File Dialogs
+
+**Status:** Required for Electron V1
+**Category:** Desktop
+
+**Purpose:** Replace browser File System Access API with native Windows dialogs.
+
+**Requirements:**
+- Single file selection
+- Multiple file selection
+- Folder selection
+- Save As dialog
+- Output directory preference
+- File type filters per tool
+- Remember last-used directory
+
+**Technology:** Electron `dialog.showOpenDialog()`, `dialog.showSaveDialog()`.
+
+---
+
+### Feature: Drag and Drop (Enhanced)
+
+**Status:** Required for Electron V1
+**Category:** Desktop
+
+**Purpose:** Drag files from Windows Explorer into FileForge.
+
+**Requirements:**
+- Drag files into tool workspace
+- Drag multiple files simultaneously
+- Folder drag-and-drop where technically supported
+- Visual drag-over state (highlight, border change)
+- Invalid file rejection with clear message
+- File type validation before processing
+- Large-file handling with size warnings
+- Batch processing through drag-and-drop
+- Consistent UX across all file-based tools
+
+**Technology:** HTML5 Drag and Drop API in renderer. Electron supports native file drag from Explorer.
+
+---
+
+### Feature: Processing Queue
+
+**Status:** Required for Electron V1
+**Category:** Desktop
+
+**Purpose:** Manage multiple concurrent processing jobs.
+
+**States:** `pending` | `processing` | `completed` | `failed` | `cancelled`
+
+**Requirements:**
+- Visual queue panel showing all active and recent jobs
+- Per-job: status, progress, file name, cancel/retry buttons
+- Concurrent job limits (configurable)
+- Queue persists during session (in-memory)
+- Failed jobs show error summary and retry option
+- Completed jobs show open/copy actions
+
+---
+
+### Feature: Windows Notifications
+
+**Status:** Required for Electron V1
+**Category:** Desktop
+
+**Purpose:** Notify users of processing results.
+
+**Events:**
+- Processing completed
+- Processing failed
+- Batch processing completed
+- Update available
+
+**Requirements:**
+- No sensitive file content in notifications
+- User can toggle notifications in Settings
+- Notification click brings window to focus
+- Notification uses app icon and name
+
+**Technology:** Electron `Notification` API (uses Windows toast notifications).
+
+---
+
+### Feature: Clipboard Integration
+
+**Status:** Required for Electron V1
+**Category:** Desktop
+
+**Purpose:** Copy/paste within the application.
+
+**Requirements:**
+- Copy developer tool results (all 7 developer tools)
+- Copy file path from result cards
+- Standard keyboard shortcuts: Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+A
+- Copy button on all developer tool output areas
+- Do not force clipboard where it does not make sense (e.g., file processing results are saved to disk, not copied)
+
+---
+
+### Feature: Auto-Update
+
+**Status:** Implemented (Electron V1) — 2026-09-16
+**Category:** Desktop
+
+**Purpose:** Keep FileForge up to date.
+
+**Requirements:**
+- Check for updates on startup (optional, configurable)
+- Manual "Check for Updates" in Settings
+- Show update availability with version number
+- Download update with progress indicator
+- Install update (prompt for restart)
+- Handle failed downloads gracefully with retry
+- User can dismiss/skip specific versions
+- Version comparison (semantic versioning)
+
+**Technology:** `electron-updater` with GitHub Releases (`SALMANHABIB443/FileForge`). Downloads and installs are always user-triggered; versions dismissed in the "Not now" flow are skipped on future checks.
+
+---
+
+### Feature: Overwrite Protection
+
+**Status:** Required for Electron V1
+**Category:** Desktop
+
+**Purpose:** Prevent accidental overwriting of user files.
+
+**Requirements:**
+- Before writing output, check if file exists at target path
+- If exists: auto-rename with suffix (`_1`, `_2`, etc.) by default
+- Alternative: show confirmation dialog (configurable in Settings)
+- User can configure preference in Settings
+- Never silently overwrite without user awareness
+
+---
+
+### Feature: Open Output
+
+**Status:** Required for Electron V1
+**Category:** Desktop
+
+**Purpose:** Provide quick access to processed results.
+
+**Requirements:**
+- "Open File" — opens with system default application (`shell.openPath()`)
+- "Open Folder" — opens containing folder in Explorer (`shell.showItemInFolder()`)
+- "Copy Path" — copies full file path to clipboard
+- Available on result card after successful processing
+
+---
+
+### Feature: Output Location Management
+
+**Status:** Required for Electron V1
+**Category:** Desktop
+
+**Purpose:** Remember and manage where processed files are saved.
+
+**Requirements:**
+- Remember preferred output directory
+- Default: same directory as input file, or user-configured default
+- Safe fallback: system Downloads folder
+- User can change default in Settings
+- Output directory shown in result card
+
+---
+
+## Future Features (V2)
+
+### Feature: System Tray
+
+**Status:** Future (V2)
+**Category:** Desktop
+
+**Purpose:** Background presence and quick access.
+
+**Potential uses:**
+- Background processing monitoring
+- Long-running job status
+- Quick access to recent tools
+- Application status indicator
+- Processing queue at a glance
+
+**Not required for V1.**
 
 ---
 
 ## Shared Behaviors Across Features
 
-### Progress & Loading
+### Progress and Loading
 - Instant tools: button loading state only.
 - Jobs: dedicated processing screen or persistent bottom bar with progress, stage text, Cancel button.
-- Percentage when available; otherwise indeterminate + stage (“Extracting audio…”, “Writing PDF…”).
+- Percentage when available; otherwise indeterminate + stage message.
+- Desktop: queue panel shows progress for all active jobs.
 
 ### Success State
-- Card with output filename, size, and primary actions: Save / Share / Open / Convert another.
-- Optional “Show in folder” on desktop.
+- Card with output filename, size, and primary actions.
+- Desktop: Open File, Open Folder, Copy Path.
+- Web: Save / Share / Download.
 
 ### Cancellation
-- Always available for jobs expected to take > 2 s.
+- Always available for jobs expected to take > 2 seconds.
 - Immediate UI response; background cleanup.
+- Safe via AbortSignal at engine-defined checkpoints.
 
-### Storage & Naming
-- Temporary → validated → final location.
+### Retry
+- Available for failed jobs where safe.
+- Creates a new job with the same inputs and options.
+- Not available for corrupted input or unsupported format errors.
+
+### Storage and Naming
+- Temporary > validated > final location.
 - Collision: append ` (1)`, ` (2)` or timestamp.
-- User can choose location when File System Access API is available.
-
-### Sharing
-- Native Web Share API / platform share sheet when available.
-- Fallback: download.
+- Desktop: user can choose location via Save As dialog.
+- Overwrite protection: auto-rename or confirmation (configurable).
 
 ### Error Communication
-Use the messages defined in PRD.md. Keep them short, actionable, and free of technical jargon unless the user expands “Details”.
+Use the messages defined in PRD.md. Keep them short, actionable, and free of technical jargon unless the user expands "Details".
 
 ---
 
-## Feature Dependencies (Selected)
+## Feature Dependencies
 
-- **Any conversion** → File Picker + Job System + File Service + History
-- **Video → MP3** → File Picker + Job System + FFmpeg Adapter + Storage
-- **PDF Merge** → File Picker + Job System + PDF Engine + Storage
-- **Extract ZIP** → File Picker + Job System + Zip Engine (with safety checks) + Storage
-- **Images → PDF** → Image handling + PDF Engine
+- **Any conversion** > File Picker + Job System + File Service + History
+- **Video to Audio** > File Picker + Job System + FFmpeg Engine + Storage
+- **PDF Merge** > File Picker + Job System + PDF Engine + Storage
+- **Extract ZIP** > File Picker + Job System + ZIP Engine (with safety checks) + Storage
+- **Images to PDF** > Image handling + PDF Engine
 
 New tools must register in the Tool Registry so the Universal Convert surface and Tools catalog stay consistent.
 
+---
+
 ## Third-Party Runtime Dependencies
 
-All libraries below load offline (bundled or self-hosted) and are justified by licensing, size, and offline requirements:
+All libraries below load offline (bundled or self-hosted):
 
-| Library | Version | License | Size (gzip) | Notes |
-|---------|---------|---------|-------------|-------|
-| pdf-lib | 1.17.1 | MIT | ~140 KB | Lazy-loaded with dynamic import; used by all PDF tools |
-| pdfjs-dist | 6.3.289 | Apache-2.0 | ~1.2 MB (worker) | Lazy-loaded; worker emitted as a Vite asset and served same-origin |
-| exifreader | 4.45.0 | MPL-2.0 | ~38 KB | Lazy-loaded; used only for JPEG/WebP EXIF display. MPL-2.0 is file-level — no modifications made to the library, so obligations extend only to redistributing the library itself. |
-| jszip | 3.10.2 | MIT (GPL dual) | ~30 KB | Used for browser ZIP creation via `generateAsync` |
-| @ffmpeg/ffmpeg + @ffmpeg/core | 0.12.x | MIT (FFmpeg LGPL elements) | ~31 MB (core, self-hosted in `public/ffmpeg/`) | Lazy-loaded; FFmpeg core not bundled into JS chunks |
-
-Shared engine utilities (extracted to avoid duplication): `checkAbort` in `src/utils/abort.ts`, `zipBlobs` in `src/utils/zip.ts`, plus coercion/validation helpers exported from the image and PDF engines for unit testing.
+| Library | Version | License | Notes |
+|---------|---------|---------|-------|
+| pdf-lib | 1.17.1 | MIT | Lazy-loaded; used by all PDF tools |
+| pdfjs-dist | 6.3.289 | Apache-2.0 | Lazy-loaded; worker served as Vite asset |
+| exifreader | 4.45.0 | MPL-2.0 | Lazy-loaded; JPEG/WebP EXIF only. MPL-2.0 obligations extend only to redistribution of the library itself |
+| jszip | 3.10.2 | MIT (GPL dual) | ZIP creation via `generateAsync` |
+| @ffmpeg/ffmpeg + @ffmpeg/core | 0.12.x | MIT (FFmpeg LGPL elements) | ~31 MB core self-hosted in `public/ffmpeg/` |
+| react | 19.1.0 | MIT | UI framework |
+| react-router-dom | 7.6.1 | MIT | Client-side routing |
+| zustand | 5.0.5 | MIT | State management |
 
 ---
 

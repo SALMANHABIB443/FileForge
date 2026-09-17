@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 import { RenamePreviewPanel } from '@/components/rename-preview-panel'
 
 export const batchRenameTool: ToolDefinition = {
@@ -72,8 +72,9 @@ export const batchRenameTool: ToolDefinition = {
       max: 10,
     },
   ],
-  engine: lazyEngine(() =>
-    import('@/engines/rename-engine').then((m) => ({ execute: m.batchRename })),
+  engine: engineFor(
+    'rename.batch',
+    () => import('@/engines/rename-engine').then((m) => ({ execute: m.batchRename })),
   ),
   customPanel: RenamePreviewPanel,
 }

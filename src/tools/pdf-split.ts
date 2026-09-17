@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 
 export const pdfSplitTool: ToolDefinition = {
   id: 'pdf-split',
@@ -26,8 +26,9 @@ export const pdfSplitTool: ToolDefinition = {
       placeholder: '1-3, 5, 8-10',
     },
   ],
-  engine: lazyEngine(() =>
-    import('@/engines/pdf-engine').then((m) => ({ execute: m.splitPdf })),
+  engine: engineFor(
+    'pdf.split',
+    () => import('@/engines/pdf-engine').then((m) => ({ execute: m.splitPdf })),
   ),
   outputExtension: 'pdf',
 }

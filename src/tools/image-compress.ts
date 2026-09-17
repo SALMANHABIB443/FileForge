@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 
 export const imageCompressTool: ToolDefinition = {
   id: 'image-compress',
@@ -32,7 +32,8 @@ export const imageCompressTool: ToolDefinition = {
       default: true,
     },
   ],
-  engine: lazyEngine(() =>
-    import('@/engines/image-engine').then((m) => ({ execute: m.compressImage })),
+  engine: engineFor(
+    'image.compress',
+    () => import('@/engines/image-engine').then((m) => ({ execute: m.compressImage })),
   ),
 }

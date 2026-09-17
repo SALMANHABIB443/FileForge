@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 
 const CRFS = [18, 22, 28, 32, 38]
 const AUDIO_BITRATES = [96, 128, 192]
@@ -39,8 +39,9 @@ export const videoCompressTool: ToolDefinition = {
       default: 128,
     },
   ],
-  engine: lazyEngine(() =>
-    import('@/engines/ffmpeg-engine').then((m) => ({ execute: m.compressVideo })),
+  engine: engineFor(
+    'ffmpeg.compressVideo',
+    () => import('@/engines/ffmpeg-engine').then((m) => ({ execute: m.compressVideo })),
   ),
   outputExtension: 'mp4',
 }

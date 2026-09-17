@@ -1,9 +1,10 @@
 import type { ConversionResult } from '@/types/engine'
-import type { FileMeta } from '@/types/job'
+import type { FileMeta, JobProgressDetail } from '@/types/job'
 import { readFileAsBlob } from '@/services/file-service'
 import { generateOutputName } from '@/utils/filename'
 import { checkAbort } from '@/utils/abort'
 import { zipBlobs } from '@/utils/zip'
+import { BatchError } from '@/utils/batch-error'
 
 export interface RenameResult {
   original: string
@@ -57,7 +58,7 @@ export function computeRenames(
 export async function batchRename(
   inputs: FileMeta[],
   options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ): Promise<ConversionResult> {
   if (inputs.length === 0) {
@@ -79,14 +80,36 @@ export async function batchRename(
 
   onProgress?.(10, 'Building ZIP…')
   const blobs: Array<{ name: string; blob: Blob }> = []
+  const failed: Array<{ name: string; error: string }> = []
 
   for (let i = 0; i < inputs.length; i++) {
     const file = inputs[i]!
     const rename = renames[i]!
     checkAbort(signal!)
-    onProgress?.(10 + Math.round((i / inputs.length) * 60), `Processing ${file.name}…`)
-    const blob = await readFileAsBlob(file)
-    blobs.push({ name: rename.renamed, blob })
+    onProgress?.(10 + Math.round((i / inputs.length) * 60), `Processing ${file.name}…`, {
+      index: i + 1,
+      total: inputs.length,
+    })
+    try {
+      const blob = await readFileAsBlob(file)
+      blobs.push({ name: rename.renamed, blob })
+    } catch (err) {
+      if (signal?.aborted) throw err
+      failed.push({ name: file.name, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
+  if (blobs.length === 0) {
+    throw new BatchError(`Could not read any of the ${inputs.length} files. ${failed[0]?.error ?? ''}`.trim(), {
+      failedFiles: failed,
+    })
+  }
+
+  if (failed.length > 0) {
+    throw new BatchError(
+      `${failed.length} of ${inputs.length} files could not be read and were skipped.`,
+      { failedFiles: failed },
+    )
   }
 
   onProgress?.(75, 'Creating ZIP…')

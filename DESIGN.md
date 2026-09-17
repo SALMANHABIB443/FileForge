@@ -929,3 +929,140 @@ The most important visual characteristics are:
 
 Do not redesign the visual identity into a different style. Improve
 polish and consistency while staying faithful to this reference.
+
+------------------------------------------------------------------------
+
+# 23. Desktop (Electron) — UI Additions
+
+**Status:** Design notes for the future Electron Windows desktop
+implementation. These additions follow the existing visual language and
+do not change any design tokens above.
+
+The web/PWA design system remains the source of truth. The desktop
+version applies the same tokens, radii, type scale, and components to
+the Electron window. The following sections define Electron-specific UX
+behavior only.
+
+## 23.1 Window Behavior
+
+-   Default window size: 1280 x 800 (min 960 x 640).
+-   Resizable window; content reflows using the existing responsive
+    breakpoints (sidebar stays fixed at ~270px on desktop widths).
+-   Standard Windows title bar (frames enabled by default). No custom
+    title bar in V1.
+-   App window is a single main window. No child windows in V1.
+-   Closing the window quits the application (no background presence in
+    V1). System Tray is a V2 feature.
+-   Window state (position/size) is remembered between launches.
+
+## 23.2 Native Dialogs
+
+Native Windows dialogs (file open, folder open, Save As, message boxes)
+replace any browser-picker UI in the desktop build:
+
+-   File picker: `dialog.showOpenDialog()` with tool-specific file type
+    filters. Multi-select where the tool accepts multiple files.
+-   Folder picker: `dialog.showOpenDialog({ properties: ['openDirectory'] })`
+    for output folder and archive extraction targets.
+-   Save As: `dialog.showSaveDialog()` with suggested filename and file
+    type filter. The suggested name follows the existing naming strategy
+    (`{base}_{operation}.{ext}`).
+-   Confirmation dialogs: borrow the existing card/pill button styling
+    inside the window; OS-native dialogs are only used where required.
+
+## 23.3 Drag and Drop
+
+Drag-and-drop from Windows Explorer is supported in every file-based
+tool workspace:
+
+-   The existing drop zone (section 9) is reused as the drop target.
+-   Drag-over state: the existing "Drop state" styling (slight warm-brown
+    background tint, slightly darker dashed border). No new animation.
+-   Dropped files are validated (type, size) and invalid files are
+    rejected with the error message pattern from PRD.md.
+-   Folder drops are accepted where the tool supports folders
+    (principally archive extraction).
+-   Keyboard users always have the "Select Files" button as an
+    alternative (section 18 accessibility requirement).
+
+## 23.4 Notifications
+
+Windows toast notifications use the application name and icon. They are
+plain system notifications — no custom rendering — so they follow the OS
+visual language, not this design system.
+
+-   Include: processing completed, processing failed, batch completed,
+    update available.
+-   Text is short, human-readable, and never exposes file content
+    (e.g., "Image conversion completed" rather than filenames/paths).
+-   Clicking a notification focuses the FileForge window.
+
+## 23.5 Processing States and Queue
+
+The processing UI (progress bar, stage text, cancel) uses the existing
+component styles. The desktop Queue adds a list of job cards:
+
+-   Each row is a standard activity-style card (section 11) with a
+    status badge (Pending / Processing / Completed / Failed / Cancelled)
+    and a progress bar for the active job.
+-   The progress bar uses the primary brown for fill; the existing muted
+    border for track.
+-   Status badges reuse the pill treatment: green for Completed
+    (existing), warm-neutral for Pending/Processing, red/ember for
+    Failed, gray for Cancelled.
+-   Per-row actions reuse the icon-only circular button style: cancel
+    (X), retry (refresh), remove (trash/X).
+
+## 23.6 Native File Interactions in Result State
+
+After a successful job, the result card (existing success card styling)
+gains desktop actions:
+
+-   **Open File** — primary action, opens with the system default app.
+-   **Open Folder** — opens the containing folder in Explorer.
+-   **Copy Path** — copies the full file path; shows a brief "Copied"
+    check state on the button.
+-   These use the existing secondary pill-button style.
+
+## 23.7 Keyboard Behavior
+
+In-app keyboard shortcuts are allowed and follow Windows conventions:
+
+-   Ctrl+C / Ctrl+V / Ctrl+X / Ctrl+A — standard clipboard/edit
+    behavior.
+-   Ctrl+S — Save/Save As where applicable (developer tools copy).
+-   Ctrl+Z / Ctrl+Shift+Z — undo/redo in text inputs.
+-   Escape — close dialogs, cancel a pending selection, dismiss an
+    overlay.
+-   Enter — confirm the focused primary action.
+-   Global (system-wide) shortcuts and Windows auto-start are **not
+    planned for V1** (see PRD.md).
+
+## 23.8 Error States (Desktop)
+
+Errors reuse the existing error card, with these desktop additions:
+
+-   A secondary "Details" action expands technical information
+    (short error code, file name when safe) without exposing stack
+    traces in the normal UI.
+-   Where useful, a hint about the affected file is shown in batch
+    errors (e.g., "Failed on `photo_003.jpg`").
+
+## 23.9 Update UI
+
+"Check for Updates" (Settings) uses the existing card/input styling:
+
+-   Status line: current version, then "Checking…" / "Update available" /
+    "Installing…" / "Up to date" / error message.
+-   Update download shows a progress bar (brown fill) and an
+    "Install and Restart" primary pill button when ready.
+-   Treat the update flow as a regular Settings section; no separate
+    modal in V1.
+
+## 23.10 Installer Branding
+
+The installer window presents the FileForge name, version, and icon
+(.ico). It offers the Start Menu shortcut and an optional Desktop
+shortcut checkbox. The uninstaller mirrors the same branding. These are
+OS-native installer screens, not custom-designed UI; the product name
+and icon are the branding applied.

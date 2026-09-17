@@ -28,7 +28,7 @@ function updateJob(id: string, patch: Partial<Job>): Job {
 }
 
 export function createJob(input: JobCreateInput): Job {
-  const id = generateJobId()
+  const id = input.id ?? generateJobId()
   const now = Date.now()
   const job: Job = {
     id,
@@ -38,8 +38,10 @@ export function createJob(input: JobCreateInput): Job {
     outputName: input.outputName,
     options: input.options ?? {},
     progress: { percent: 0 },
-    createdAt: now,
+    createdAt: input.createdAt ?? now,
     updatedAt: now,
+    retryCount: input.retryCount ?? 0,
+    interrupted: input.interrupted,
   }
   jobs.set(id, job)
   notify(job)
@@ -58,12 +60,32 @@ export function updateJobStatus(id: string, status: JobStatus): Job {
   return updateJob(id, { status })
 }
 
-export function updateJobProgress(id: string, percent: number, message?: string): Job {
-  return updateJob(id, { progress: { percent, message } })
+export function updateJobProgress(
+  id: string,
+  percent: number,
+  message?: string,
+  index?: number,
+  total?: number,
+): Job {
+  return updateJob(id, { progress: { percent, message, index, total } })
 }
 
 export function failJob(id: string, error: string): Job {
   return updateJob(id, { status: 'failed', error })
+}
+
+export function failJobWithDetails(
+  id: string,
+  error: string,
+  details?: { errorDetails?: string; failedFiles?: Array<{ name: string; error: string }>; interrupted?: boolean },
+): Job {
+  return updateJob(id, {
+    status: 'failed',
+    error,
+    errorDetails: details?.errorDetails,
+    failedFiles: details?.failedFiles,
+    interrupted: details?.interrupted ?? false,
+  })
 }
 
 export function completeJob(id: string, outputName: string, blob: Blob): Job {
@@ -75,6 +97,29 @@ export function completeJob(id: string, outputName: string, blob: Blob): Job {
     outputUrl: url,
     progress: { percent: 100 },
   })
+}
+
+export function completeJobFromPath(
+  id: string,
+  outputName: string,
+  outputPath: string,
+  outputSize: number,
+): Job {
+  return updateJob(id, {
+    status: 'completed',
+    outputName,
+    outputPath,
+    outputSize,
+    progress: { percent: 100 },
+  })
+}
+
+export function setJobSavedPath(id: string, path: string): Job {
+  return updateJob(id, { savedPath: path })
+}
+
+export function clearJobSavedPath(id: string): Job {
+  return updateJob(id, { savedPath: undefined })
 }
 
 export function cancelJob(id: string): Job {

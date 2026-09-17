@@ -1,4 +1,4 @@
-import type { FileMeta } from '@/types/job'
+import type { FileMeta, JobProgressDetail } from '@/types/job'
 import { readFileAsBlob } from '@/services/file-service'
 
 export interface DuplicateGroup {
@@ -16,13 +16,16 @@ async function hashFile(blob: Blob): Promise<string> {
 
 export async function findDuplicates(
   files: FileMeta[],
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
 ): Promise<DuplicateGroup[]> {
   const hashMap = new Map<string, FileMeta[]>()
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i]!
-    onProgress?.(Math.round((i / files.length) * 90), `Hashing ${file.name}…`)
+    onProgress?.(Math.round((i / files.length) * 90), `Hashing ${file.name}…`, {
+      index: i + 1,
+      total: files.length,
+    })
     const blob = await readFileAsBlob(file)
     const hash = await hashFile(blob)
     const group = hashMap.get(hash)

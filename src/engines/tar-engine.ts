@@ -1,6 +1,6 @@
 import type { ConversionResult } from '@/types/engine'
-import type { FileMeta } from '@/types/job'
-import { readFileAsBlob } from '@/services/file-service'
+import type { FileMeta, JobProgressDetail } from '@/types/job'
+import { readFileAsBlob, writeExtractionEntry } from '@/services/file-service'
 import { generateOutputName, sanitizeFilename } from '@/utils/filename'
 import { checkAbort } from '@/utils/abort'
 
@@ -95,7 +95,7 @@ export async function listTarContents(file: File): Promise<TarEntry[]> {
 export async function extractTar(
   inputs: FileMeta[],
   options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ): Promise<ConversionResult> {
   const file = inputs[0]!
@@ -156,9 +156,10 @@ export async function extractTar(
     throw new Error('No safe files found in this TAR')
   }
 
+  const desktopOutputDir = options.outputDir as string | undefined
   const directoryHandle = options.directoryHandle as FileSystemDirectoryHandle | undefined
 
-  if (typeof window !== 'undefined' && 'showDirectoryPicker' in window && directoryHandle) {
+  if (desktopOutputDir || directoryHandle) {
     onProgress?.(30, 'Extracting to chosen folder…')
     const createdFiles: FileSystemFileHandle[] = []
     const createdDirs: FileSystemDirectoryHandle[] = []
@@ -167,17 +168,26 @@ export async function extractTar(
       for (const entry of entries) {
         checkAbort(signal!)
         current++
-        onProgress?.(30 + Math.round((current / entries.length) * 60), `Extracting ${entry.name}…`)
-        const handled = await writeFileToDirectory(directoryHandle, entry.name, entry.data)
-        createdFiles.push(...handled.files)
-        createdDirs.push(...handled.dirs)
+        onProgress?.(30 + Math.round((current / entries.length) * 60), `Extracting ${entry.name}…`, {
+          index: current,
+          total: entries.length,
+        })
+        if (desktopOutputDir) {
+          await writeExtractionEntry(desktopOutputDir, entry.name, entry.data)
+        } else {
+          const handled = await writeFileToDirectory(directoryHandle!, entry.name, entry.data)
+          createdFiles.push(...handled.files)
+          createdDirs.push(...handled.dirs)
+        }
       }
     } catch (err) {
-      for (const f of createdFiles) {
-        try { await removeHandle(f) } catch { /* best effort */ }
-      }
-      for (const d of createdDirs.slice().reverse()) {
-        try { await removeHandle(d) } catch { /* best effort */ }
+      if (!desktopOutputDir) {
+        for (const f of createdFiles) {
+          try { await removeHandle(f) } catch { /* best effort */ }
+        }
+        for (const d of createdDirs.slice().reverse()) {
+          try { await removeHandle(d) } catch { /* best effort */ }
+        }
       }
       throw err
     }
@@ -202,7 +212,10 @@ export async function extractTar(
   for (const entry of entries) {
     checkAbort(signal!)
     current++
-    onProgress?.(30 + Math.round((current / entries.length) * 50), `Processing ${entry.name}…`)
+    onProgress?.(30 + Math.round((current / entries.length) * 50), `Processing ${entry.name}…`, {
+      index: current,
+      total: entries.length,
+    })
     outZip.file(sanitizeFilename(entry.name), entry.data)
   }
 

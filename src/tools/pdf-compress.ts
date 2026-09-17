@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 
 export const pdfCompressTool: ToolDefinition = {
   id: 'pdf-compress',
@@ -21,8 +21,9 @@ export const pdfCompressTool: ToolDefinition = {
       default: 'medium',
     },
   ],
-  engine: lazyEngine(() =>
-    import('@/engines/pdf-engine').then((m) => ({ execute: m.compressPdf })),
+  engine: engineFor(
+    'pdf.compress',
+    () => import('@/engines/pdf-engine').then((m) => ({ execute: m.compressPdf })),
   ),
   outputExtension: 'pdf',
 }

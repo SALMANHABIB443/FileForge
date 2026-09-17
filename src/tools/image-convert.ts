@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 
 export const imageConvertTool: ToolDefinition = {
   id: 'image-convert',
@@ -36,8 +36,9 @@ export const imageConvertTool: ToolDefinition = {
       default: true,
     },
   ],
-  engine: lazyEngine(() =>
-    import('@/engines/image-engine').then((m) => ({ execute: m.convertImage })),
+  engine: engineFor(
+    'image.convert',
+    () => import('@/engines/image-engine').then((m) => ({ execute: m.convertImage })),
   ),
   outputExtension: 'jpg',
 }

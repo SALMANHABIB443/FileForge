@@ -1,5 +1,11 @@
 node_modules
 dist
+out
+release
+*.blockmap
 *.local
 .env
 .env.*
+tsconfig.tsbuildinfo
+.qa-*.log
+build/

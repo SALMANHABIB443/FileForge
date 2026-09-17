@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 
 export const tarExtractTool: ToolDefinition = {
   id: 'tar-extract',
@@ -9,7 +9,8 @@ export const tarExtractTool: ToolDefinition = {
   supportedInputs: ['application/x-tar'],
   defaultOptions: {},
   optionSchema: [],
-  engine: lazyEngine(() =>
-    import('@/engines/tar-engine').then((m) => ({ execute: m.extractTar })),
+  engine: engineFor(
+    'tar.extract',
+    () => import('@/engines/tar-engine').then((m) => ({ execute: m.extractTar })),
   ),
 }

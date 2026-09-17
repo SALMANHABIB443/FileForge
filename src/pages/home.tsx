@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { FilePreview } from '@/components/file-preview'
 import { getAllTools } from '@/services/tool-registry'
-import { pickFiles, fileMetasFromFiles } from '@/services/file-service'
+import { pickFiles, fileMetasFromDrop } from '@/services/file-service'
 import { useAppStore } from '@/store'
 import { getHistoryEntries, type HistoryEntry } from '@/services/history-service'
 import { formatFileSize } from '@/utils/filename'
@@ -68,7 +68,7 @@ export default function Home() {
     setDragOver(false)
     const dropped = e.dataTransfer?.files
     if (dropped && dropped.length > 0) {
-      acceptFiles(fileMetasFromFiles(Array.from(dropped)))
+      acceptFiles(fileMetasFromDrop(Array.from(dropped)))
     }
   }
 

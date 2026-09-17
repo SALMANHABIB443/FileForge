@@ -1,10 +1,11 @@
 import type { ConversionResult } from '@/types/engine'
-import type { FileMeta } from '@/types/job'
+import type { FileMeta, JobProgressDetail } from '@/types/job'
 import { readFileAsBlob } from '@/services/file-service'
 import { generateOutputName, getFileExtension, resolveCollision } from '@/utils/filename'
 import { transferExifToJpeg } from '@/utils/exif'
 import { checkAbort } from '@/utils/abort'
 import { zipBlobs } from '@/utils/zip'
+import { BatchError } from '@/utils/batch-error'
 
 type ImageFormat = 'jpeg' | 'png' | 'webp'
 
@@ -243,7 +244,7 @@ async function applyMetadataPolicy(
 type ImageOperation = (
   file: FileMeta,
   options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ) => Promise<ConversionResult>
 
@@ -251,7 +252,7 @@ async function runImageBatch(
   files: FileMeta[],
   options: Record<string, unknown>,
   run: ImageOperation,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
   suffix = 'converted',
 ): Promise<ConversionResult> {
@@ -260,15 +261,43 @@ async function runImageBatch(
 
   const existingNames = new Set<string>()
   const entries: { name: string; blob: Blob }[] = []
+  const failed: Array<{ name: string; error: string }> = []
   for (let i = 0; i < files.length; i++) {
     checkAbort(signal)
-    onProgress?.(((i + 1) / files.length) * 90, `Processing ${files[i]!.name}…`)
-    const result = await run(files[i]!, options, undefined, signal)
-    checkAbort(signal)
-    const name = resolveCollision(result.filename, existingNames)
-    existingNames.add(name)
-    entries.push({ name, blob: result.blob })
+    onProgress?.(((i + 1) / files.length) * 90, `Processing ${files[i]!.name}…`, {
+      index: i + 1,
+      total: files.length,
+    })
+    const file = files[i]!
+    try {
+      const result = await run(file, options, undefined, signal)
+      checkAbort(signal)
+      const name = resolveCollision(result.filename, existingNames)
+      existingNames.add(name)
+      entries.push({ name, blob: result.blob! })
+    } catch (err) {
+      if (signal?.aborted) throw err
+      failed.push({ name: file.name, error: err instanceof Error ? err.message : String(err) })
+    }
   }
+
+  if (entries.length === 0) {
+    throw new BatchError(
+      `Could not process any of the ${files.length} files. ${failed[0]?.error ?? ''}`.trim(),
+      { failedFiles: failed },
+    )
+  }
+
+  if (failed.length > 0) {
+    throw new BatchError(
+      `${entries.length} of ${files.length} files were processed, but ${failed.length} could not be processed and were skipped.`,
+      {
+        failedFiles: failed,
+        details: failed.map((f) => `${f.name}: ${f.error}`).join('\n'),
+      },
+    )
+  }
+
   onProgress?.(95, 'Writing ZIP…')
   const blob = await zipBlobs(entries)
   checkAbort(signal)
@@ -307,7 +336,7 @@ const convertOne: ImageOperation = async (file, options, onProgress, signal) => 
 export async function convertImage(
   files: FileMeta[],
   options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ): Promise<ConversionResult> {
   return runImageBatch(files, options, convertOne, onProgress, signal, 'converted')
@@ -358,7 +387,7 @@ const compressOne: ImageOperation = async (file, options, onProgress, signal) =>
 export async function compressImage(
   files: FileMeta[],
   options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ): Promise<ConversionResult> {
   return runImageBatch(files, options, compressOne, onProgress, signal, 'compressed')
@@ -419,7 +448,7 @@ const resizeOne: ImageOperation = async (file, options, onProgress, signal) => {
 export async function resizeImage(
   files: FileMeta[],
   options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ): Promise<ConversionResult> {
   return runImageBatch(files, options, resizeOne, onProgress, signal, 'resized')
@@ -428,7 +457,7 @@ export async function resizeImage(
 export async function cropImage(
   files: FileMeta[],
   options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ): Promise<ConversionResult> {
   const file = files[0]!

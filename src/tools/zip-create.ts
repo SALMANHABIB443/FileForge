@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 
 export const zipCreateTool: ToolDefinition = {
   id: 'zip-create',
@@ -22,8 +22,9 @@ export const zipCreateTool: ToolDefinition = {
       default: 6,
     },
   ],
-  engine: lazyEngine(() =>
-    import('@/engines/zip-engine').then((m) => ({ execute: m.createZip })),
+  engine: engineFor(
+    'zip.create',
+    () => import('@/engines/zip-engine').then((m) => ({ execute: m.createZip })),
   ),
   outputExtension: 'zip',
 }

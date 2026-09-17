@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 
 export const pdfMergeTool: ToolDefinition = {
   id: 'pdf-merge',
@@ -10,8 +10,9 @@ export const pdfMergeTool: ToolDefinition = {
   acceptsMultipleFiles: true,
   defaultOptions: {},
   optionSchema: [],
-  engine: lazyEngine(() =>
-    import('@/engines/pdf-engine').then((m) => ({ execute: m.mergePdfs })),
+  engine: engineFor(
+    'pdf.merge',
+    () => import('@/engines/pdf-engine').then((m) => ({ execute: m.mergePdfs })),
   ),
   outputExtension: 'pdf',
 }

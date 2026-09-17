@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 import { FileReorderPanel } from '@/components/file-reorder-panel'
 
 export const imagesToPdfTool: ToolDefinition = {
@@ -42,8 +42,9 @@ export const imagesToPdfTool: ToolDefinition = {
     },
   ],
   customPanel: FileReorderPanel,
-  engine: lazyEngine(() =>
-    import('@/engines/pdf-engine').then((m) => ({ execute: m.imagesToPdf })),
+  engine: engineFor(
+    'pdf.imagesToPdf',
+    () => import('@/engines/pdf-engine').then((m) => ({ execute: m.imagesToPdf })),
   ),
   outputExtension: 'pdf',
 }

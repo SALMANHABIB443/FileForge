@@ -1,8 +1,9 @@
 import type { ConversionResult } from '@/types/engine'
-import type { FileMeta } from '@/types/job'
-import { readFileAsBlob } from '@/services/file-service'
+import type { FileMeta, JobProgressDetail } from '@/types/job'
+import { readFileAsBlob, writeExtractionEntry } from '@/services/file-service'
 import { generateOutputName, sanitizeFilename } from '@/utils/filename'
 import { checkAbort } from '@/utils/abort'
+import { BatchError } from '@/utils/batch-error'
 
 const MAX_ENTRIES = 2000
 const MAX_TOTAL_UNCOMPRESSED = 4 * 1024 * 1024 * 1024
@@ -33,7 +34,7 @@ export function nestingDepth(path: string): number {
 export async function createZip(
   inputs: FileMeta[],
   options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ): Promise<ConversionResult> {
   if (inputs.length === 0) {
@@ -44,13 +45,28 @@ export async function createZip(
   const JSZip = (await import('jszip')).default
   const zip = new JSZip()
 
+  const failed: Array<{ name: string; error: string }> = []
   for (let i = 0; i < inputs.length; i++) {
     const file = inputs[i]!
     checkAbort(signal!)
-    onProgress?.(Math.round((i / inputs.length) * 50), `Adding ${file.name}…`)
+    onProgress?.(Math.round((i / inputs.length) * 50), `Adding ${file.name}…`, {
+      index: i + 1,
+      total: inputs.length,
+    })
 
-    const blob = await readFileAsBlob(file)
-    zip.file(file.name, blob)
+    try {
+      const blob = await readFileAsBlob(file)
+      zip.file(file.name, blob)
+    } catch (err) {
+      if (signal?.aborted) throw err
+      failed.push({ name: file.name, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+  if (failed.length > 0) {
+    throw new BatchError(
+      `${inputs.length - failed.length} of ${inputs.length} files were added, but ${failed.length} could not be read.`,
+      { failedFiles: failed, details: failed.map((f) => `${f.name}: ${f.error}`).join('\n') },
+    )
   }
 
   checkAbort(signal!)
@@ -118,7 +134,7 @@ function manifestToBlob(manifest: ExtractManifest): Blob {
 export async function extractZip(
   inputs: FileMeta[],
   options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ): Promise<ConversionResult> {
   const file = inputs[0]!
@@ -187,9 +203,10 @@ export async function extractZip(
     }
   }
 
+  const desktopOutputDir = options.outputDir as string | undefined
   const directoryHandle = options.directoryHandle as FileSystemDirectoryHandle | undefined
 
-  if (typeof window !== 'undefined' && 'showDirectoryPicker' in window && directoryHandle) {
+  if (desktopOutputDir || directoryHandle) {
     onProgress?.(30, 'Extracting to chosen folder…')
     const createdFiles: FileSystemFileHandle[] = []
     const createdDirs: FileSystemDirectoryHandle[] = []
@@ -198,19 +215,28 @@ export async function extractZip(
       for (const entry of extractable) {
         checkAbort(signal!)
         current++
-        onProgress?.(30 + Math.round((current / extractable.length) * 60), `Extracting ${entry.name}…`)
+        onProgress?.(30 + Math.round((current / extractable.length) * 60), `Extracting ${entry.name}…`, {
+          index: current,
+          total: extractable.length,
+        })
 
         const data = await entry.async('uint8array')
-        const handled = await writeFileToDirectory(directoryHandle, entry.name, data)
-        createdFiles.push(...handled.files)
-        createdDirs.push(...handled.dirs)
+        if (desktopOutputDir) {
+          await writeExtractionEntry(desktopOutputDir, entry.name, data)
+        } else {
+          const handled = await writeFileToDirectory(directoryHandle!, entry.name, data)
+          createdFiles.push(...handled.files)
+          createdDirs.push(...handled.dirs)
+        }
       }
     } catch (err) {
-      for (const f of createdFiles) {
-        try { await removeHandle(f) } catch { /* best effort */ }
-      }
-      for (const d of createdDirs.slice().reverse()) {
-        try { await removeHandle(d) } catch { /* best effort */ }
+      if (!desktopOutputDir) {
+        for (const f of createdFiles) {
+          try { await removeHandle(f) } catch { /* best effort */ }
+        }
+        for (const d of createdDirs.slice().reverse()) {
+          try { await removeHandle(d) } catch { /* best effort */ }
+        }
       }
       throw err
     }
@@ -221,7 +247,7 @@ export async function extractZip(
       totalFiles: extractable.length,
       totalSize: extractTotalSize,
       skipped,
-      destination: directoryHandle.name || 'chosen folder',
+      destination: desktopOutputDir || directoryHandle?.name || 'chosen folder',
       fallback: false,
     }
     return {
@@ -238,7 +264,10 @@ export async function extractZip(
   for (const entry of extractable) {
     checkAbort(signal!)
     current++
-    onProgress?.(30 + Math.round((current / extractable.length) * 50), `Processing ${entry.name}…`)
+    onProgress?.(30 + Math.round((current / extractable.length) * 50), `Processing ${entry.name}…`, {
+      index: current,
+      total: extractable.length,
+    })
     const data = await entry.async('uint8array')
     outZip.file(sanitizeFilename(entry.name), data)
   }

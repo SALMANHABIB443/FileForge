@@ -73,7 +73,20 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    setupFiles: [],
-    include: ['src/**/*.test.{ts,tsx}'],
+    setupFiles: ['src/test/setup.ts'],
+    include: ['src/**/*.test.{ts,tsx}', 'electron/**/*.test.{ts,tsx}'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/**', 'electron/**'],
+      exclude: [
+        'src/test/**',
+        'electron/engines/test-util.ts',
+        'electron/engines/worker-src/**',
+        '**/*.test.{ts,tsx}',
+        'src/main.tsx',
+        'src/pwa-register-stub.ts',
+      ],
+    },
   },
 })

@@ -9,6 +9,7 @@ const INK = '#0a0a0a'
 const PAPER = '#ffffff'
 
 mkdirSync(outDir, { recursive: true })
+mkdirSync(resolve(root, 'build'), { recursive: true })
 
 function roundedRect(ctx, x, y, w, h, r) {
   const rr = Math.min(r, w / 2, h / 2)
@@ -98,3 +99,39 @@ for (const t of targets) {
   writeFileSync(resolve(outDir, t.file), render(t.size, t.scale))
   console.log(`wrote ${t.file} (${t.size}x${t.size})`)
 }
+
+// Generate Windows .ico file with multiple sizes packed into a single icon.
+function packICO(pngBuffers) {
+  const count = pngBuffers.length
+  const headerSize = 6 + count * 16
+  const dirEntries = []
+  let dataOffset = headerSize
+
+  for (const { size, png } of pngBuffers) {
+    const entry = Buffer.alloc(16)
+    // ICO spec: 0 means >= 256 (or 0 for special cases)
+    entry.writeUInt8(size >= 256 ? 0 : size, 0)
+    entry.writeUInt8(size >= 256 ? 0 : size, 1)
+    entry.writeUInt8(0, 2)
+    entry.writeUInt8(0, 3)
+    entry.writeUInt16LE(1, 4)
+    entry.writeUInt16LE(32, 6)
+    entry.writeUInt32LE(png.length, 8)
+    entry.writeUInt32LE(dataOffset, 12)
+    dirEntries.push(entry)
+    dataOffset += png.length
+  }
+
+  const header = Buffer.alloc(6)
+  header.writeUInt16LE(0, 0)
+  header.writeUInt16LE(1, 2)
+  header.writeUInt16LE(count, 4)
+  return Buffer.concat([header, ...dirEntries, ...pngBuffers.map((b) => b.png)])
+}
+
+const icoSizes = [16, 24, 32, 48, 64, 128, 256]
+const icoScales = { 16: 0.65, 24: 0.65, 32: 0.6, 48: 0.55, 64: 0.55, 128: 0.52, 256: 0.5 }
+const icoPngs = icoSizes.map((s) => ({ size: s, png: render(s, icoScales[s]) }))
+const icoData = packICO(icoPngs)
+writeFileSync(resolve(root, 'build/icon.ico'), icoData)
+console.log(`wrote icon.ico (${icoData.length} bytes, ${icoSizes.length} sizes)`)

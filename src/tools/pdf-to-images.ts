@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 
 export const pdfToImagesTool: ToolDefinition = {
   id: 'pdf-to-images',
@@ -45,8 +45,9 @@ export const pdfToImagesTool: ToolDefinition = {
       placeholder: 'e.g. 1-3, 5, 8-10',
     },
   ],
-  engine: lazyEngine(() =>
-    import('@/engines/pdf-engine').then((m) => ({ execute: m.pdfToImages })),
+  engine: engineFor(
+    'pdf.toImages',
+    () => import('@/engines/pdf-engine').then((m) => ({ execute: m.pdfToImages })),
   ),
   outputExtension: 'jpg',
 }

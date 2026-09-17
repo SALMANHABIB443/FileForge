@@ -1,21 +1,45 @@
 {
   "name": "fileforge",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "Privacy-first file toolbox — convert, compress, merge, split, and process images, PDFs, videos, audio, and archives entirely on your device.",
+  "author": "SALMANHABIB443",
+  "homepage": "https://github.com/SALMANHABIB443/FileForge",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SALMANHABIB443/FileForge.git"
+  },
   "type": "module",
+  "main": "out/main/main.js",
   "scripts": {
     "dev": "vite",
+    "dev:electron": "electron-vite dev",
     "build": "npm run setup:ffmpeg && tsc -b && vite build",
+    "build:electron": "npm run setup:ffmpeg && tsc -b && tsc -p electron/tsconfig.json && electron-vite build",
     "preview": "vite preview",
+    "preview:electron": "electron-vite preview",
+    "verify:electron": "node scripts/verify-phase10.mjs",
+    "verify:electron:phase12": "node scripts/verify-phase12.mjs",
+    "verify:electron:phase13": "node scripts/verify-phase13.mjs",
+    "verify:electron:phase14": "node scripts/verify-phase14.mjs",
+    "verify:electron:phase15": "node scripts/verify-phase15.mjs",
+    "benchmark:electron": "node scripts/benchmark-electron.mjs",
+    "package:electron": "npm run build:electron && electron-builder --win",
+    "package:dir": "electron-builder --win dir",
+    "release": "electron-builder --win --publish always",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc -b && tsc -p electron/tsconfig.json",
     "lint": "eslint .",
     "setup:ffmpeg": "node scripts/copy-ffmpeg.mjs"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.15",
+    "@napi-rs/canvas": "^1.0.9",
+    "electron-updater": "^6.8.9",
     "exifreader": "^4.45.0",
+    "ffmpeg-static": "^5.3.0",
     "jszip": "^3.10.2",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.3.289",
@@ -27,14 +51,24 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@ffmpeg/core": "^0.12.10",
-    "@napi-rs/canvas": "^1.0.9",
     "@tailwindcss/vite": "^4.1.8",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.5.2",
+    "@vitest/coverage-v8": "^3.2.7",
+    "axe-core": "^4.13.0",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
     "eslint": "^10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.6",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^26.1.0",
     "tailwindcss": "^4.1.8",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.70.0",
@@ -45,6 +79,56 @@
   "allowScripts": {
     "esbuild": true,
     "lightningcss": true,
-    "exifreader": true
+    "exifreader": true,
+    "ffmpeg-static": true
+  },
+  "build": {
+    "appId": "com.fileforge.app",
+    "productName": "FileForge",
+    "compression": "maximum",
+    "releaseInfo": {
+      "releaseNotes": "FileForge 1.0.0 — first production release. Privacy-first, fully offline file toolbox: convert, compress, merge, split, and process images, PDFs, videos, audio, and archives entirely on your device."
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "SALMANHABIB443",
+      "repo": "FileForge"
+    },
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "!node_modules/ffmpeg-static/**"
+    ],
+    "asarUnpack": [
+      "node_modules/@napi-rs/canvas/**",
+      "node_modules/@napi-rs/canvas-win32-x64-msvc/**"
+    ],
+    "extraResources": [
+      {
+        "from": "node_modules/ffmpeg-static/ffmpeg.exe",
+        "to": "ffmpeg/ffmpeg.exe"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "FileForge-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "FileForge",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
+    }
   }
 }

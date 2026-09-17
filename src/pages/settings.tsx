@@ -9,6 +9,16 @@ import { APP_VERSION } from '@/version'
 import { PRIVACY_POLICY } from '@/data/privacy-policy'
 import { LICENSES } from '@/data/licenses'
 import { APP_NAME, APP_DESCRIPTION_SHORT } from '@/data/store-assets'
+import { isDesktop, chooseDirectory } from '@/services/file-service'
+import {
+  checkForUpdates,
+  dismissUpdate,
+  downloadUpdate,
+  getUpdateState,
+  installAndRestart,
+  subscribeUpdates,
+  type UpdatesState,
+} from '@/services/updater'
 
 interface FlagDef {
   key: FlagKey
@@ -25,6 +35,287 @@ function formatBytes(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
   return `${(bytes / 1024 ** i).toFixed(1)} ${units[i]}`
+}
+
+function OutputLocationSection({
+  settings,
+  onChange,
+}: {
+  settings: Settings
+  onChange: (patch: Partial<Settings>) => void
+}) {
+  const [picking, setPicking] = useState(false)
+  const isDesktopApp = isDesktop()
+
+  if (!isDesktopApp) return null
+
+  const handleChoose = async () => {
+    setPicking(true)
+    try {
+      const dir = await chooseDirectory()
+      if (dir) onChange({ defaultOutputDir: dir.path })
+    } finally {
+      setPicking(false)
+    }
+  }
+
+  const handleClear = () => onChange({ defaultOutputDir: '' })
+
+  const dirName = settings.defaultOutputDir
+    ? settings.defaultOutputDir.split(/[/\\]/).filter(Boolean).pop() ?? settings.defaultOutputDir
+    : null
+
+  return (
+    <Section title="Output location">
+      <p className="text-[14px] leading-[1.43] text-mid-gray font-[family-name:var(--font-geist)]">
+        Files are saved here automatically. You can still choose a different location with Save As before saving.
+      </p>
+      <div className="flex items-center gap-2 flex-wrap">
+        {settings.defaultOutputDir ? (
+          <span className="text-[14px] leading-[1.43] text-ink font-[family-name:var(--font-geist)] truncate max-w-[320px]" title={settings.defaultOutputDir}>
+            {dirName}
+          </span>
+        ) : (
+          <span className="text-[14px] leading-[1.43] text-mid-gray font-[family-name:var(--font-geist)]">
+            No default folder — saves next to the input file or temp folder
+          </span>
+        )}
+        <Button variant="secondary" size="sm" onClick={handleChoose} disabled={picking}>
+          {settings.defaultOutputDir ? 'Change' : 'Choose folder'}
+        </Button>
+        {settings.defaultOutputDir && (
+          <Button variant="destructive" size="sm" onClick={handleClear}>
+            Clear
+          </Button>
+        )}
+      </div>
+      <div>
+        <label
+          htmlFor="overwrite-protection"
+          className="block text-[14px] leading-[1.43] text-mid-gray font-[family-name:var(--font-geist)]"
+        >
+          When a file with the same name already exists
+        </label>
+        <select
+          id="overwrite-protection"
+          value={settings.overwriteProtection}
+          onChange={(e) =>
+            onChange({ overwriteProtection: e.target.value as Settings['overwriteProtection'] })
+          }
+          className="mt-2 w-full bg-surface-alt text-ink rounded-[var(--radius-md)] px-4 py-2.5 text-[14px] font-[family-name:var(--font-geist)] focus:outline-none border border-transparent focus:border-hairline transition-colors"
+        >
+          <option value="autorename">Keep both — rename the new file (1), (2), …</option>
+          <option value="confirm">Ask me first</option>
+        </select>
+        <p className="mt-1.5 text-[12px] leading-[1.33] text-mid-gray font-[family-name:var(--font-geist)]">
+          FileForge never replaces an existing file silently.
+        </p>
+      </div>
+    </Section>
+  )
+}
+
+function NotificationsSection({
+  settings,
+  onChange,
+}: {
+  settings: Settings
+  onChange: (patch: Partial<Settings>) => void
+}) {
+  if (!isDesktop()) return null
+
+  return (
+    <Section title="Notifications">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-[14px] leading-[1.43] font-semibold text-ink font-[family-name:var(--font-geist)]">
+            Job completion toasts
+          </p>
+          <p className="text-[12px] leading-[1.33] text-mid-gray font-[family-name:var(--font-geist)]">
+            Show a Windows notification when a job finishes or fails. Only shown while FileForge is
+            in the background, and never includes file names or paths.
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-pressed={settings.notificationsEnabled}
+          aria-label={`Job completion toasts: ${settings.notificationsEnabled ? 'on' : 'off'}`}
+          onClick={() => onChange({ notificationsEnabled: !settings.notificationsEnabled })}
+          className={`shrink-0 px-4 min-h-[44px] rounded-[var(--radius-buttons)] text-[13px] font-semibold transition-colors font-[family-name:var(--font-geist)] ${
+            settings.notificationsEnabled ? 'bg-brown text-paper' : 'bg-surface-alt text-brown-dark hover:bg-brown-light'
+          }`}
+        >
+          {settings.notificationsEnabled ? 'On' : 'Off'}
+        </button>
+      </div>
+    </Section>
+  )
+}
+
+function UpdatesSection({
+  settings,
+  onChange,
+}: {
+  settings: Settings
+  onChange: (patch: Partial<Settings>) => void
+}) {
+  const [status, setStatus] = useState<UpdatesState>(getUpdateState)
+
+  useEffect(() => subscribeUpdates(setStatus), [])
+
+  if (!isDesktop()) return null
+
+  return (
+    <Section title="Updates">
+      <p className="text-[14px] leading-[1.43] text-mid-gray font-[family-name:var(--font-geist)]">
+        FileForge v{APP_VERSION}. Updates are checked with GitHub Releases and are never forced.
+      </p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-[14px] leading-[1.43] font-semibold text-ink font-[family-name:var(--font-geist)]">
+            Check for updates on startup
+          </p>
+          <p className="text-[12px] leading-[1.33] text-mid-gray font-[family-name:var(--font-geist)]">
+            Checks for a new version a few seconds after FileForge opens. You can always check manually below.
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-pressed={settings.autoCheckUpdates}
+          aria-label={`Check for updates on startup: ${settings.autoCheckUpdates ? 'on' : 'off'}`}
+          onClick={() => onChange({ autoCheckUpdates: !settings.autoCheckUpdates })}
+          className={`shrink-0 px-4 min-h-[44px] rounded-[var(--radius-buttons)] text-[13px] font-semibold transition-colors font-[family-name:var(--font-geist)] ${
+            settings.autoCheckUpdates ? 'bg-brown text-paper' : 'bg-surface-alt text-brown-dark hover:bg-brown-light'
+          }`}
+        >
+          {settings.autoCheckUpdates ? 'On' : 'Off'}
+        </button>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => checkForUpdates()}
+          disabled={status.type === 'checking' || status.type === 'downloading'}
+        >
+          {status.type === 'checking' ? 'Checking…' : 'Check for Updates'}
+        </Button>
+      </div>
+      <UpdateStatusCard
+        status={status}
+        onDownload={() => downloadUpdate()}
+        onInstall={() => installAndRestart()}
+        onDismiss={() => dismissUpdate()}
+      />
+    </Section>
+  )
+}
+
+function UpdateStatusCard({
+  status,
+  onDownload,
+  onInstall,
+  onDismiss,
+}: {
+  status: UpdatesState
+  onDownload: () => void
+  onInstall: () => void
+  onDismiss: () => void
+}) {
+  const muted = 'text-[13px] leading-[1.5] text-mid-gray font-[family-name:var(--font-geist)]'
+
+  switch (status.type) {
+    case 'idle':
+      return (
+        <p className={`${muted} max-w-[580px]`}>
+          Check for updates to see whether a newer version of FileForge is available.
+        </p>
+      )
+    case 'dev':
+      return (
+        <p className={`${muted} max-w-[580px]`}>
+          Automatic updates are not available in this build.
+        </p>
+      )
+    case 'checking':
+      return <p className="text-[13px] leading-[1.5] text-ink font-[family-name:var(--font-geist)]">Checking for updates…</p>
+    case 'notAvailable':
+      return <p className="text-[13px] leading-[1.5] text-ink font-[family-name:var(--font-geist)]">You're on the latest version.</p>
+    case 'downloading':
+      return (
+        <div className="space-y-2 max-w-[580px]">
+          <p className="text-[13px] leading-[1.5] text-ink font-[family-name:var(--font-geist)]">
+            Downloading update… {status.percent}%
+          </p>
+          <div
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={status.percent}
+            aria-label="Update download progress"
+            className="h-2 w-full rounded-full bg-surface-alt overflow-hidden"
+          >
+            <div className="h-full rounded-full bg-brown transition-[width]" style={{ width: `${status.percent}%` }} />
+          </div>
+        </div>
+      )
+    case 'available':
+      return (
+        <div className="rounded-[14px] bg-surface-alt p-4 space-y-3 max-w-[580px]">
+          <p className="text-[14px] leading-[1.43] font-semibold text-ink font-[family-name:var(--font-geist)]">
+            FileForge {status.version} is available
+          </p>
+          {status.releaseNotes ? (
+            <p className="text-[13px] leading-[1.5] text-mid-gray whitespace-pre-wrap font-[family-name:var(--font-geist)]">
+              {status.releaseNotes}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={onDownload}>
+              Download
+            </Button>
+            <Button variant="secondary" size="sm" onClick={onDismiss}>
+              Not now
+            </Button>
+          </div>
+        </div>
+      )
+    case 'downloaded':
+      return (
+        <div className="rounded-[14px] bg-surface-alt p-4 space-y-3 max-w-[580px]">
+          <p className="text-[14px] leading-[1.43] text-ink font-[family-name:var(--font-geist)]">
+            FileForge {status.version} has been downloaded.
+          </p>
+          <Button size="sm" onClick={onInstall}>
+            Install and Restart
+          </Button>
+        </div>
+      )
+    case 'dismissed':
+      return (
+        <div className="rounded-[14px] bg-surface-alt p-4 space-y-3 max-w-[580px]">
+          <p className="text-[13px] leading-[1.5] text-mid-gray font-[family-name:var(--font-geist)]">
+            Version {status.version} won't be suggested again. You can still download it manually.
+          </p>
+          <Button variant="secondary" size="sm" onClick={onDownload}>
+            Download
+          </Button>
+        </div>
+      )
+    case 'error':
+      return (
+        <div className="rounded-[14px] bg-surface-alt p-4 space-y-3 max-w-[580px]">
+          <p className="text-[13px] leading-[1.5] text-ink font-[family-name:var(--font-geist)]">
+            The update check failed: {status.message}
+          </p>
+          <Button variant="secondary" size="sm" onClick={() => checkForUpdates()}>
+            Retry
+          </Button>
+        </div>
+      )
+    default:
+      return null
+  }
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -277,6 +568,57 @@ export default function SettingsPage() {
             <option value="download">Always download</option>
             <option value="opfs">Use local storage</option>
           </select>
+        </div>
+      </Section>
+
+      <OutputLocationSection settings={settings} onChange={(patch) => setSettings({ ...settings, ...patch })} />
+
+      <NotificationsSection settings={settings} onChange={(patch) => setSettings({ ...settings, ...patch })} />
+
+      <UpdatesSection settings={settings} onChange={(patch) => setSettings({ ...settings, ...patch })} />
+
+      <Section title="Jobs & queue">
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <label htmlFor="max-concurrent" className="text-[14px] leading-[1.43] text-ink font-[family-name:var(--font-geist)]">
+              Run at most
+            </label>
+            <input
+              id="max-concurrent"
+              type="number"
+              min={1}
+              max={4}
+              value={settings.maxConcurrentJobs}
+              onChange={(e) =>
+                setSettings({ ...settings, maxConcurrentJobs: Math.min(4, Math.max(1, Number(e.target.value) || 1)) })
+              }
+              className="w-16 bg-surface-alt text-ink rounded-[var(--radius-md)] px-3 py-2 text-[14px] font-[family-name:var(--font-geist)] focus:outline-none border border-transparent focus:border-hairline transition-colors"
+            />
+            <label htmlFor="max-concurrent" className="text-[14px] leading-[1.43] text-mid-gray font-[family-name:var(--font-geist)]">
+              jobs at the same time (1–4)
+            </label>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[14px] leading-[1.43] font-semibold text-ink font-[family-name:var(--font-geist)]">
+                Resume queued jobs after restart
+              </p>
+              <p className="text-[12px] leading-[1.33] text-mid-gray font-[family-name:var(--font-geist)]">
+                Restore pending jobs and resume processing them when FileForge opens again.
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-pressed={settings.resumePendingJobs}
+              aria-label={`Resume queued jobs after restart: ${settings.resumePendingJobs ? 'on' : 'off'}`}
+              onClick={() => setSettings({ ...settings, resumePendingJobs: !settings.resumePendingJobs })}
+              className={`shrink-0 px-4 min-h-[44px] rounded-[var(--radius-buttons)] text-[13px] font-semibold transition-colors font-[family-name:var(--font-geist)] ${
+                settings.resumePendingJobs ? 'bg-brown text-paper' : 'bg-surface-alt text-brown-dark hover:bg-brown-light'
+              }`}
+            >
+              {settings.resumePendingJobs ? 'On' : 'Off'}
+            </button>
+          </div>
         </div>
       </Section>
 

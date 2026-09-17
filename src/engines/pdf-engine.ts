@@ -1,10 +1,11 @@
 import type { PDFImage } from 'pdf-lib'
 import type { ConversionResult } from '@/types/engine'
-import type { FileMeta } from '@/types/job'
+import type { FileMeta, JobProgressDetail } from '@/types/job'
 import { readFileAsBlob } from '@/services/file-service'
 import { generateOutputName, getFileExtension } from '@/utils/filename'
 import { checkAbort } from '@/utils/abort'
 import { zipBlobs } from '@/utils/zip'
+import { BatchError } from '@/utils/batch-error'
 
 async function readBytes(file: FileMeta): Promise<Uint8Array> {
   const blob = await readFileAsBlob(file)
@@ -37,7 +38,7 @@ function withCause(message: string, cause: unknown): Error {
 export async function imagesToPdf(
   inputs: FileMeta[],
   options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ): Promise<ConversionResult> {
   const { PDFDocument } = await import('pdf-lib')
@@ -46,59 +47,81 @@ export async function imagesToPdf(
   const orientation = String(options.orientation ?? 'portrait')
   const margin = Math.max(0, Math.min(96, Number(options.margin) || 24))
 
+  const failed: Array<{ name: string; error: string }> = []
   for (let i = 0; i < inputs.length; i++) {
     const file = inputs[i]!
     checkAbort(signal!)
-    onProgress?.((i / inputs.length) * 90, `Adding ${file.name}…`)
+    onProgress?.((i / inputs.length) * 90, `Adding ${file.name}…`, {
+      index: i + 1,
+      total: inputs.length,
+    })
 
-    const bytes = await readBytes(file)
-    const ext = getFileExtension(file.name)
+    try {
+      const bytes = await readBytes(file)
+      const ext = getFileExtension(file.name)
 
-    let image: PDFImage
-    if (ext === 'png') {
-      image = await pdf.embedPng(bytes)
-    } else if (ext === 'jpg' || ext === 'jpeg') {
-      image = await pdf.embedJpg(bytes)
-    } else {
-      throw new Error(`Unsupported image type "${ext}" for PDF — convert to JPG or PNG first`)
+      let image: PDFImage
+      if (ext === 'png') {
+        image = await pdf.embedPng(bytes)
+      } else if (ext === 'jpg' || ext === 'jpeg') {
+        image = await pdf.embedJpg(bytes)
+      } else {
+        throw new Error(`Unsupported image type "${ext}" for PDF — convert to JPG or PNG first`)
+      }
+
+      const imgW = image.width
+      const imgH = image.height
+
+      let pageW = imgW
+      let pageH = imgH
+
+      if (pageSize === 'a4') {
+        pageW = 595.28
+        pageH = 841.89
+      } else if (pageSize === 'letter') {
+        pageW = 612
+        pageH = 792
+      }
+
+      if (orientation === 'landscape' && pageH > pageW) {
+        const tmp = pageW
+        pageW = pageH
+        pageH = tmp
+      }
+      if (orientation === 'portrait' && pageW > pageH) {
+        const tmp = pageW
+        pageW = pageH
+        pageH = tmp
+      }
+
+      const page = pdf.addPage([pageW, pageH])
+
+      const availW = Math.max(1, pageW - margin * 2)
+      const availH = Math.max(1, pageH - margin * 2)
+      const scale = Math.min(availW / imgW, availH / imgH)
+      const drawW = imgW * scale
+      const drawH = imgH * scale
+      const x = (pageW - drawW) / 2
+      const y = (pageH - drawH) / 2
+
+      page.drawImage(image, { x, y, width: drawW, height: drawH })
+    } catch (err) {
+      if (signal?.aborted) throw err
+      failed.push({ name: file.name, error: err instanceof Error ? err.message : String(err) })
     }
+  }
 
-    const imgW = image.width
-    const imgH = image.height
-
-    let pageW = imgW
-    let pageH = imgH
-
-    if (pageSize === 'a4') {
-      pageW = 595.28
-      pageH = 841.89
-    } else if (pageSize === 'letter') {
-      pageW = 612
-      pageH = 792
-    }
-
-    if (orientation === 'landscape' && pageH > pageW) {
-      const tmp = pageW
-      pageW = pageH
-      pageH = tmp
-    }
-    if (orientation === 'portrait' && pageW > pageH) {
-      const tmp = pageW
-      pageW = pageH
-      pageH = tmp
-    }
-
-    const page = pdf.addPage([pageW, pageH])
-
-    const availW = Math.max(1, pageW - margin * 2)
-    const availH = Math.max(1, pageH - margin * 2)
-    const scale = Math.min(availW / imgW, availH / imgH)
-    const drawW = imgW * scale
-    const drawH = imgH * scale
-    const x = (pageW - drawW) / 2
-    const y = (pageH - drawH) / 2
-
-    page.drawImage(image, { x, y, width: drawW, height: drawH })
+  if (pdf.getPageCount() === 0) {
+    throw new BatchError(
+      `Could not add any of the ${inputs.length} images to the PDF. ${failed[0]?.error ?? ''}`.trim(),
+      { failedFiles: failed },
+    )
+  }
+  if (failed.length > 0) {
+    throw new BatchError(
+      `${pdf.getPageCount()} of ${inputs.length} images were added, but ${failed.length} could not be processed and were skipped.`,
+      { failedFiles: failed, details: failed.map((f) => `${f.name}: ${f.error}`).join('\n') },
+    )
   }
 
   onProgress?.(95, 'Writing PDF…')
@@ -115,7 +138,7 @@ export async function imagesToPdf(
 export async function mergePdfs(
   inputs: FileMeta[],
   _options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ): Promise<ConversionResult> {
   if (inputs.length < 2) {
@@ -125,17 +148,33 @@ export async function mergePdfs(
   const { PDFDocument } = await import('pdf-lib')
   const output = await PDFDocument.create()
 
+  const failed: Array<{ name: string; error: string }> = []
   for (let i = 0; i < inputs.length; i++) {
     const file = inputs[i]!
     checkAbort(signal!)
-    onProgress?.((i / inputs.length) * 90, `Merging ${file.name}…`)
+    onProgress?.((i / inputs.length) * 90, `Merging ${file.name}…`, {
+      index: i + 1,
+      total: inputs.length,
+    })
 
-    const bytes = await readBytes(file)
-    const source = await loadPdf(bytes, file.name)
-    const pages = await output.copyPages(source, source.getPageIndices())
-    for (const page of pages) {
-      output.addPage(page)
+    try {
+      const bytes = await readBytes(file)
+      const source = await loadPdf(bytes, file.name)
+      const pages = await output.copyPages(source, source.getPageIndices())
+      for (const page of pages) {
+        output.addPage(page)
+      }
+    } catch (err) {
+      if (signal?.aborted) throw err
+      failed.push({ name: file.name, error: err instanceof Error ? err.message : String(err) })
     }
+  }
+
+  if (failed.length > 0) {
+    throw new BatchError(
+      `${inputs.length - failed.length} of ${inputs.length} PDFs were merged, but ${failed.length} could not be added.`,
+      { failedFiles: failed, details: failed.map((f) => `${f.name}: ${f.error}`).join('\n') },
+    )
   }
 
   onProgress?.(95, 'Writing PDF…')
@@ -181,7 +220,7 @@ export function parseRanges(rangeSpec: string, pageCount: number): number[] {
 export async function splitPdf(
   inputs: FileMeta[],
   options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ): Promise<ConversionResult> {
   const file = inputs[0]!
@@ -201,7 +240,10 @@ export async function splitPdf(
       doc.addPage(page)
       const pageBytes = await doc.save()
       entries.push({ name: `${file.name.replace(/\.[^.]+$/, '')}_page_${i + 1}.pdf`, blob: pageBytes })
-      onProgress?.(5 + (i / pageCount) * 90, `Page ${i + 1} of ${pageCount}`)
+      onProgress?.(5 + (i / pageCount) * 90, `Page ${i + 1} of ${pageCount}`, {
+        index: i + 1,
+        total: pageCount,
+      })
     }
     onProgress?.(97, 'Writing ZIP…')
     checkAbort(signal!)
@@ -236,7 +278,7 @@ export async function splitPdf(
 export async function compressPdf(
   inputs: FileMeta[],
   _options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ): Promise<ConversionResult> {
   const file = inputs[0]!
@@ -275,7 +317,7 @@ export async function pdfPageCountForRange(bytes: Uint8Array): Promise<number> {
 export async function organizePdf(
   inputs: FileMeta[],
   options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ): Promise<ConversionResult> {
   const file = inputs[0]!
@@ -296,7 +338,10 @@ export async function organizePdf(
   onProgress?.(20, 'Building document…')
   for (let i = 0; i < indices.length; i++) {
     checkAbort(signal!)
-    onProgress?.(20 + ((i + 1) / indices.length) * 70, `Page ${i + 1} of ${indices.length}`)
+    onProgress?.(20 + ((i + 1) / indices.length) * 70, `Page ${i + 1} of ${indices.length}`, {
+      index: i + 1,
+      total: indices.length,
+    })
     const srcIndex = indices[i]!
     const page = (await output.copyPages(source, [srcIndex]))[0]!
     if (rotation !== 0) {
@@ -329,7 +374,7 @@ const MAX_PDFJS_PAGES = 200
 export async function pdfToImages(
   inputs: FileMeta[],
   options: Record<string, unknown>,
-  onProgress?: (percent: number, message?: string) => void,
+  onProgress?: (percent: number, message?: string, detail?: JobProgressDetail) => void,
   signal?: AbortSignal,
 ): Promise<ConversionResult> {
   const file = inputs[0]!
@@ -378,7 +423,7 @@ export async function pdfToImages(
   }
 
   if (pageIndices.length === 1) {
-    onProgress?.(50, `Rendering page ${pageIndices[0]}…`)
+    onProgress?.(50, `Rendering page ${pageIndices[0]}…`, { index: 1, total: pageIndices.length })
     const { name, blob } = await processPage(pageIndices[0]!)
     checkAbort(signal!)
     onProgress?.(100, 'Done')
@@ -386,11 +431,27 @@ export async function pdfToImages(
   }
 
   const entries: { name: string; blob: Blob }[] = []
+  const failed: Array<{ name: string; error: string }> = []
   for (let i = 0; i < pageIndices.length; i++) {
     checkAbort(signal!)
-    onProgress?.(5 + (i / pageIndices.length) * 90, `Rendering page ${pageIndices[i]}…`)
-    const { name, blob } = await processPage(pageIndices[i]!)
-    entries.push({ name, blob })
+    const pageNum = pageIndices[i]!
+    onProgress?.(5 + (i / pageIndices.length) * 90, `Rendering page ${pageNum}…`, {
+      index: i + 1,
+      total: pageIndices.length,
+    })
+    try {
+      const { name, blob } = await processPage(pageNum)
+      entries.push({ name, blob })
+    } catch (err) {
+      if (signal?.aborted) throw err
+      failed.push({ name: `Page ${pageNum}`, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
+  if (failed.length > 0) {
+    throw new BatchError(
+      `${entries.length} of ${pageIndices.length} pages were rendered, but ${failed.length} could not be.`,
+      { failedFiles: failed, details: failed.map((f) => `${f.name}: ${f.error}`).join('\n') },
+    )
   }
   onProgress?.(96, 'Writing ZIP…')
   checkAbort(signal!)

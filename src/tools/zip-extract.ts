@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 import { ZipPreviewPanel } from '@/components/zip-preview-panel'
 
 export const zipExtractTool: ToolDefinition = {
@@ -10,8 +10,9 @@ export const zipExtractTool: ToolDefinition = {
   supportedInputs: ['application/zip', 'application/x-zip-compressed', 'application/x-zip'],
   defaultOptions: {},
   optionSchema: [],
-  engine: lazyEngine(() =>
-    import('@/engines/zip-engine').then((m) => ({ execute: m.extractZip })),
+  engine: engineFor(
+    'zip.extract',
+    () => import('@/engines/zip-engine').then((m) => ({ execute: m.extractZip })),
   ),
   customPanel: ZipPreviewPanel,
 }

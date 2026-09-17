@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 
 export const imageResizeTool: ToolDefinition = {
   id: 'image-resize',
@@ -52,7 +52,8 @@ export const imageResizeTool: ToolDefinition = {
       default: 90,
     },
   ],
-  engine: lazyEngine(() =>
-    import('@/engines/image-engine').then((m) => ({ execute: m.resizeImage })),
+  engine: engineFor(
+    'image.resize',
+    () => import('@/engines/image-engine').then((m) => ({ execute: m.resizeImage })),
   ),
 }

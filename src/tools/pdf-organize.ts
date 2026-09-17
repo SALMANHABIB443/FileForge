@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 import { PdfPagesPanel } from '@/components/pdf-pages-panel'
 
 export const pdfOrganizeTool: ToolDefinition = {
@@ -24,8 +24,9 @@ export const pdfOrganizeTool: ToolDefinition = {
     },
   ],
   customPanel: PdfPagesPanel,
-  engine: lazyEngine(() =>
-    import('@/engines/pdf-engine').then((m) => ({ execute: m.organizePdf })),
+  engine: engineFor(
+    'pdf.organize',
+    () => import('@/engines/pdf-engine').then((m) => ({ execute: m.organizePdf })),
   ),
   outputExtension: 'pdf',
 }

@@ -2,12 +2,24 @@ export interface Settings {
   storagePreference: 'download' | 'opfs' | 'ask'
   autoCleanup: boolean
   cleanupAgeDays: number
+  defaultOutputDir: string
+  maxConcurrentJobs: number
+  resumePendingJobs: boolean
+  notificationsEnabled: boolean
+  autoCheckUpdates: boolean
+  overwriteProtection: 'autorename' | 'confirm'
 }
 
 const DEFAULT_SETTINGS: Settings = {
   storagePreference: 'ask',
   autoCleanup: true,
   cleanupAgeDays: 30,
+  defaultOutputDir: '',
+  maxConcurrentJobs: 2,
+  resumePendingJobs: true,
+  notificationsEnabled: true,
+  autoCheckUpdates: true,
+  overwriteProtection: 'autorename',
 }
 
 const STORAGE_KEY = 'fileforge_settings'

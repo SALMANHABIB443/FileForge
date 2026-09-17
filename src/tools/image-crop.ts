@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '@/services/tool-registry'
-import { lazyEngine } from '@/types/engine'
+import { engineFor } from '@/engines/native'
 import { CropPreviewPanel } from '@/components/crop-preview'
 
 export const imageCropTool: ToolDefinition = {
@@ -37,8 +37,9 @@ export const imageCropTool: ToolDefinition = {
     },
   ],
   customPanel: CropPreviewPanel,
-  engine: lazyEngine(() =>
-    import('@/engines/image-engine').then((m) => ({ execute: m.cropImage })),
+  engine: engineFor(
+    'image.crop',
+    () => import('@/engines/image-engine').then((m) => ({ execute: m.cropImage })),
   ),
   outputExtension: 'jpg',
 }

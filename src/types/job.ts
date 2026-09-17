@@ -8,11 +8,24 @@ export interface FileMeta {
   lastModified: number
   handle?: FileSystemFileHandle
   file?: File
+  path?: string
+}
+
+export interface JobProgressDetail {
+  index?: number
+  total?: number
 }
 
 export interface JobProgress {
   percent: number
   message?: string
+  index?: number
+  total?: number
+}
+
+export interface FailedFileInfo {
+  name: string
+  error: string
 }
 
 export interface Job {
@@ -26,8 +39,15 @@ export interface Job {
   createdAt: number
   updatedAt: number
   error?: string
+  errorDetails?: string
+  failedFiles?: FailedFileInfo[]
+  retryCount?: number
+  interrupted?: boolean
   outputBlob?: Blob
   outputUrl?: string
+  outputPath?: string
+  outputSize?: number
+  savedPath?: string
 }
 
 export interface JobCreateInput {
@@ -35,4 +55,8 @@ export interface JobCreateInput {
   inputs: FileMeta[]
   options?: Record<string, unknown>
   outputName?: string
+  id?: string
+  createdAt?: number
+  retryCount?: number
+  interrupted?: boolean
 }
